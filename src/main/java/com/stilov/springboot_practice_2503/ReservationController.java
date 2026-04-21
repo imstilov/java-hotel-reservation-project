@@ -22,14 +22,8 @@ public class ReservationController {
 
     @GetMapping("/{id}")
     public ResponseEntity<Reservation> getReservationByUserId(@PathVariable("id") Long id) {
-        try{
             log.info("Called getReservationById with id " + id);
-            return ResponseEntity.status(200).body(reservationService.getReservationByUserId(id));
-        } catch(NoSuchElementException e){
-            log.info("Reservation not found with id " + id);
-            return ResponseEntity.notFound().build();
-        }
-
+            return ResponseEntity.ok().body(reservationService.getReservationByUserId(id));
     }
 
     @GetMapping
@@ -41,26 +35,22 @@ public class ReservationController {
     @PostMapping
     public ResponseEntity<Reservation> createReservation(@RequestBody Reservation reservationToCreate){
         log.info("Called createReservation");
-        return ResponseEntity.status(201).header("test-header", "123").body(reservationService.createReservation(reservationToCreate));
+        return ResponseEntity.ok().header("test-header", "123").body(reservationService.createReservation(reservationToCreate));
     };
 
     @PutMapping("/{id}")
     public ResponseEntity<Reservation> updateReservation(@PathVariable("id") Long id, @RequestBody Reservation reservationToUpdate){
         log.info("Called updateReservation id={}, reservationToUpdate={}", id, reservationToUpdate);
         var updated = reservationService.upadateReservation(id, reservationToUpdate);
-        return ResponseEntity.status(200).body(updated);
+        return ResponseEntity.ok().body(updated);
 
     }
 
     @DeleteMapping("/{id}/cancel")
     public ResponseEntity<Void> cancelReservation(@PathVariable("id") Long id){
         log.info("Called cancelReservation id={}", id);
-        try {
             reservationService.cancelReservation(id);
             return ResponseEntity.ok().build();
-        } catch(NoSuchElementException e){
-            return ResponseEntity.status(404).build();
-        }
     }
 
     @PostMapping("/{id}/approve")

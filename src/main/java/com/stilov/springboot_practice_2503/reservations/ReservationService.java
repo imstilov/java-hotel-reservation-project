@@ -1,5 +1,6 @@
 package com.stilov.springboot_practice_2503.reservations;
 
+import com.stilov.springboot_practice_2503.reservations.availability.ReservationAvailabilityService;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -7,11 +8,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.util.*;
 
 @Service
 public class ReservationService {
+    private final ReservationAvailabilityService reservationAvailabilityService;
 
     private static final Logger log = LoggerFactory.getLogger(ReservationService.class);
 
@@ -19,9 +20,10 @@ public class ReservationService {
 
     private final ReservationMapper mapper;
 
-    public ReservationService(ReservationRepository repository, ReservationMapper mapper) {
+    public ReservationService(ReservationRepository repository, ReservationMapper mapper,  ReservationAvailabilityService reservationAvailabilityService) {
         this.repository = repository;
         this.mapper = mapper;
+        this.reservationAvailabilityService = reservationAvailabilityService;
     }
 
 
@@ -112,13 +114,13 @@ public class ReservationService {
         if(reservationEntity.getStatus() != ReservationStatus.PENDING){
             throw new IllegalStateException("Cannot approve reservation: status=" + reservationEntity.getStatus());
         }
-        var isConflict = isReservationConflict(
+        var isAvailable = reservationAvailabilityService.isReservationAvailable(
                 reservationEntity.getRoomId(),
                 reservationEntity.getStartDate(),
                 reservationEntity.getEndDate()
         );
-        if(isConflict){
-            throw new IllegalStateException("Cannot approve reservation: isConflict");
+        if(isAvailable){
+            throw new IllegalStateException("Cannot approve reservation: isAvailable");
         }
 
         reservationEntity.setStatus(ReservationStatus.APPROVED);
@@ -126,19 +128,4 @@ public class ReservationService {
 
         return mapper.toDomain(reservationEntity);
     }
-
-
-    private boolean isReservationConflict(
-            Long roomId,
-            LocalDate startDate,
-            LocalDate endDate) {
-        List<Long> conflictingIds = repository.findConflictReservartionsIds(roomId, startDate, endDate, ReservationStatus.APPROVED);
-        if(conflictingIds.isEmpty()){
-            return false;
-        }
-        log.info("Conflict with ids = {}", conflictingIds);
-        return true;
-    }
-
-
 }

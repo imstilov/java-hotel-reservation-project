@@ -1,5 +1,6 @@
 package com.stilov.springboot_practice_2503;
 
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -33,7 +34,7 @@ public class ReservationController {
     }
 
     @PostMapping
-    public ResponseEntity<Reservation> createReservation(@RequestBody Reservation reservationToCreate){
+    public ResponseEntity<Reservation> createReservation(@RequestBody @Valid Reservation reservationToCreate){
         log.info("Called createReservation");
         return ResponseEntity.ok().header("test-header", "123").body(reservationService.createReservation(reservationToCreate));
     };

@@ -1,4 +1,4 @@
-package com.stilov.springboot_practice_2503;
+package com.stilov.springboot_practice_2503.web;
 
 import java.time.LocalDateTime;
 

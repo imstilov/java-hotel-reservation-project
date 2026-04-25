@@ -1,6 +1,8 @@
 package com.stilov.springboot_practice_2503.reservations;
 
 import com.stilov.springboot_practice_2503.reservations.availability.ReservationAvailabilityService;
+import com.stilov.springboot_practice_2503.search_filters.GroupByUserAndStatus;
+import com.stilov.springboot_practice_2503.search_filters.ReservationSearchFilter;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,9 +33,9 @@ public class ReservationService {
             ReservationSearchFilter filter
     ) {
     int pageSize = filter.pageSize() != null
-                                    ? filter.pageSize() : 10;
+            ? filter.pageSize() : 10;
     int pageNumber = filter.pageNumber() != null
-                ? filter.pageNumber() : 0;
+            ? filter.pageNumber() : 0;
     var pageable = Pageable
                 .ofSize(pageSize)
                 .withPage(pageNumber);
@@ -44,20 +46,29 @@ public class ReservationService {
     }
 
 
+    public List<Reservation> groupByStatusAndUserId(
+            GroupByUserAndStatus filter) {
+        int pageSize = filter.pageSize() != null
+                ? filter.pageSize()
+                : 10;
+        int pageNumber = filter.pageNumber() != null
+                ? filter.pageNumber()
+                : 0;
+        var pageable = Pageable
+                .ofSize(pageSize)
+                .withPage(pageNumber);
+        List<ReservationEntity> allEntities = repository.groupByUserIdAndStatus(filter.userId(), filter.status(), pageable);
+
+        return allEntities.stream()
+                .map(mapper::toDomain).toList();
+    };
+
+
     public Reservation getReservationById(Long id) {
         ReservationEntity reservationEntity = repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Reservation not found by id: " + id));
 
         return mapper.toDomain(reservationEntity);
-    };
-
-
-    public List<Reservation> groupByStatusAndUserId(Long userId, ReservationStatus status) {
-        List<ReservationEntity> allEntities = repository.groupByUserIdAndStatus(userId, status);
-                // .orElseThrow(() -> new EntityNotFoundException("No reservations found by userId: " + userId));
-
-        return allEntities.stream()
-                .map(mapper::toDomain).toList();
     };
 
 

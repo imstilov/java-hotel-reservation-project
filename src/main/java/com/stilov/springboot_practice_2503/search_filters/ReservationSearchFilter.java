@@ -1,6 +1,4 @@
-package com.stilov.springboot_practice_2503.reservations;
-
-import org.springframework.web.bind.annotation.RequestParam;
+package com.stilov.springboot_practice_2503.search_filters;
 
 public record ReservationSearchFilter(
         Long roomId,

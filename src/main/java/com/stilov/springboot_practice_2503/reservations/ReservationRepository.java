@@ -76,11 +76,12 @@ public interface ReservationRepository extends JpaRepository<ReservationEntity, 
 
     @Query("""
     SELECT r from ReservationEntity r
-    WHERE r.userId = :userId
-    AND r.status = :status
+        WHERE r.userId = :userId
+        AND r.status = :status
 """)
     List<ReservationEntity> groupByUserIdAndStatus(
             @Param("userId") Long userId,
-            @Param("status") ReservationStatus status
+            @Param("status") ReservationStatus status,
+            Pageable pageable
     );
 }

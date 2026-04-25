@@ -1,5 +1,7 @@
 package com.stilov.springboot_practice_2503.reservations;
 
+import com.stilov.springboot_practice_2503.search_filters.GroupByUserAndStatus;
+import com.stilov.springboot_practice_2503.search_filters.ReservationSearchFilter;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,11 +48,20 @@ public class ReservationController {
     @GetMapping("/groupby")
     public ResponseEntity<List<Reservation>> groupByUserIdAndStatus(
             @RequestParam(name = "userId") Long userId,
-            @RequestParam(name = "status") ReservationStatus status
+            @RequestParam(name = "status") ReservationStatus status,
+            @RequestParam(name = "pageSize", required = false) Integer pageSize,
+            @RequestParam(name = "pageNumber", required = false) Integer pageNumber
     ){
         log.info("Called groupByStatusAndUserId");
-        return ResponseEntity.ok(reservationService.groupByStatusAndUserId(userId, status));
+        var filter = new GroupByUserAndStatus(
+                userId,
+                status,
+                pageSize,
+                pageNumber
+        );
+        return ResponseEntity.ok(reservationService.groupByStatusAndUserId(filter));
     }
+
 
     @PostMapping
     public ResponseEntity<Reservation> createReservation(@RequestBody @Valid Reservation reservationToCreate){

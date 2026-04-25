@@ -28,14 +28,6 @@ public class ReservationEntity {
     @Column(name = "status")
     private ReservationStatus status;
 
-    public void setUserId(Long userId) {
-        this.userId = userId;
-    }
-
-    public ReservationEntity() {
-
-    }
-
     public ReservationEntity(Long id, Long userId, Long roomId, LocalDate startDate, LocalDate endDate, ReservationStatus status) {
         this.id = id;
         this.userId = userId;
@@ -43,6 +35,12 @@ public class ReservationEntity {
         this.startDate = startDate;
         this.endDate = endDate;
         this.status = status;
+    }
+
+    public ReservationEntity() {}
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
 
     public void setRoomId(Long roomId) {

@@ -50,7 +50,7 @@ public class ReservationService {
             throw new IllegalArgumentException("Reservation status must be null");
         }
         if(!reservationToCreate.endDate().isAfter(reservationToCreate.startDate())){
-            throw new IllegalArgumentException("Reservation start date must be after end date");
+            throw new IllegalArgumentException("Reservation end date must be after start date");
         }
 
         var entityToSave = mapper.toEntity(reservationToCreate);
@@ -60,7 +60,7 @@ public class ReservationService {
     }
 
 
-    public Reservation upadateReservation(
+    public Reservation updateReservation(
             Long id,
             Reservation reservationToUpdate)
     {
@@ -71,7 +71,7 @@ public class ReservationService {
             throw new IllegalStateException("Reservation status cannot be modified, status is=" + reservationEntity.getStatus());
         }
         if(!reservationToUpdate.endDate().isAfter(reservationToUpdate.startDate())){
-            throw new IllegalArgumentException("Reservation start date must be after end date");
+            throw new IllegalArgumentException("Reservation end date must be after start date");
         }
 
         var reservationToSave = mapper.toEntity(reservationToUpdate);
@@ -85,7 +85,7 @@ public class ReservationService {
     }
 
 
-    public Reservation getReservationByUserId(Long id) {
+    public Reservation getReservationById(Long id) {
         ReservationEntity reservationEntity = repository.findById(id).orElseThrow(() -> new EntityNotFoundException("Reservation not found by id: " + id));
 
         return mapper.toDomain(reservationEntity);
@@ -119,7 +119,7 @@ public class ReservationService {
                 reservationEntity.getStartDate(),
                 reservationEntity.getEndDate()
         );
-        if(isAvailable){
+        if(!isAvailable){
             throw new IllegalStateException("Cannot approve reservation: isAvailable");
         }
 

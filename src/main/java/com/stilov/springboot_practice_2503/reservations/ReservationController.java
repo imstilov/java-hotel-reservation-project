@@ -23,7 +23,7 @@ public class ReservationController {
     @GetMapping("/{id}")
     public ResponseEntity<Reservation> getReservationByUserId(@PathVariable("id") Long id) {
             log.info("Called getReservationById with id " + id);
-            return ResponseEntity.ok().body(reservationService.getReservationByUserId(id));
+            return ResponseEntity.ok().body(reservationService.getReservationById(id));
     }
 
     @GetMapping
@@ -52,7 +52,7 @@ public class ReservationController {
     @PutMapping("/{id}")
     public ResponseEntity<Reservation> updateReservation(@PathVariable("id") Long id, @RequestBody Reservation reservationToUpdate){
         log.info("Called updateReservation id={}, reservationToUpdate={}", id, reservationToUpdate);
-        var updated = reservationService.upadateReservation(id, reservationToUpdate);
+        var updated = reservationService.updateReservation(id, reservationToUpdate);
         return ResponseEntity.ok().body(updated);
 
     }

@@ -10,9 +10,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/reservation")
@@ -92,10 +91,12 @@ public class ReservationController {
     }
 
     @PostMapping("/{id}/approve")
-    public ResponseEntity<ApiResponse<Reservation>> approveReservation(@PathVariable("id") Long id){
+    public CompletableFuture<ResponseEntity<ApiResponse<Reservation>>> approveReservation(@PathVariable("id") Long id){
         log.info("Called approveReservation id={}", id);
-        var reservation = reservationService.approveReservation(id);
-        return ResponseEntity.ok(ApiResponse.responseOk(reservation, "Reservation approved successfully."));
+        return reservationService.approveReservation(id)
+                .thenApply(reservation -> ResponseEntity.ok(
+                        ApiResponse.responseOk(reservation, "Reservation approved successfully.")
+                ));
     }
 
     @DeleteMapping("/{id}/cancel")

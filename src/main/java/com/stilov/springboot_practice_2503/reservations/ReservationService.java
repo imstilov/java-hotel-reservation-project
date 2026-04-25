@@ -9,12 +9,14 @@ import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 public class ReservationService {
@@ -146,7 +148,8 @@ public class ReservationService {
     }
 
 
-    public Reservation approveReservation(Long id) {
+    @Async
+    public CompletableFuture<Reservation> approveReservation(Long id) {
         var reservationEntity = repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Reservation not found by id: " + id));
 
@@ -165,6 +168,7 @@ public class ReservationService {
         reservationEntity.setStatus(ReservationStatus.APPROVED);
         repository.save(reservationEntity);
         requestCounterService.increment();
-        return mapper.toDomain(reservationEntity);
+        Reservation result = mapper.toDomain(reservationEntity);
+        return CompletableFuture.completedFuture(result);
     }
 }

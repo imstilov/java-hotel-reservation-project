@@ -1,5 +1,6 @@
-package com.stilov.springboot_practice_2503.web;
+package com.stilov.springboot_practice_2503.web.exceptions;
 
+import com.stilov.springboot_practice_2503.web.ApiResponse;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,8 +9,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-
-import java.time.LocalDateTime;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
@@ -30,9 +29,9 @@ public class GlobalExceptionHandler {
                 .body(errorResponse);
     }
 
-    @ExceptionHandler(EntityNotFoundException.class)
-    public ResponseEntity<ApiResponse<Void>> handleEntityNotFound(EntityNotFoundException e) {
-        log.error("Handle EntityNotFoundException", e);
+    @ExceptionHandler(ReservationNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleEntityNotFound(ReservationNotFoundException e) {
+        log.error("Handle ReservationNotFoundException", e);
 
         var errorResponse = ApiResponse.<Void>responseError(
                 "Entity not found",
@@ -45,10 +44,10 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(exception = { IllegalArgumentException.class,
-                                    IllegalStateException.class,
-                                    MethodArgumentNotValidException.class
+                                    MethodArgumentNotValidException.class,
+                                    ReservationException.class
     })
-    public ResponseEntity<ApiResponse<Void>> handleBadRequest(IllegalArgumentException e) {
+    public ResponseEntity<ApiResponse<Void>> handleBadRequest(Exception e) {
         log.error("HandleBadRequest", e);
 
         var errorResponse = ApiResponse.<Void>responseError(

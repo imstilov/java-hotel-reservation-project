@@ -5,6 +5,9 @@ import com.stilov.springboot_practice_2503.reservations.stats.RequestCounterServ
 import com.stilov.springboot_practice_2503.reservations.stats.ReservationStats;
 import com.stilov.springboot_practice_2503.search_filters.GroupByUserAndStatus;
 import com.stilov.springboot_practice_2503.search_filters.ReservationSearchFilter;
+import com.stilov.springboot_practice_2503.web.exceptions.InvalidReservationStatusException;
+import com.stilov.springboot_practice_2503.web.exceptions.ReservationNotFoundException;
+import com.stilov.springboot_practice_2503.web.exceptions.RoomNotAvailableException;
 import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,7 +81,7 @@ public class ReservationService {
 
     public Reservation getReservationById(Long id) {
         ReservationEntity reservationEntity = repository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Reservation not found by id: " + id));
+                .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));
 
         return mapper.toDomain(reservationEntity);
     };
@@ -99,7 +102,12 @@ public class ReservationService {
         if(!reservationToCreate.endDate().isAfter(reservationToCreate.startDate())){
             throw new IllegalArgumentException("Reservation end date must be after start date");
         }
-
+        if(!reservationAvailabilityService.isReservationAvailable(  reservationToCreate.roomId(),
+                                                                    reservationToCreate.startDate(),
+                                                                    reservationToCreate.endDate()
+                                                                    )){
+            throw new RoomNotAvailableException(reservationToCreate.roomId());
+        }
         var entityToSave = mapper.toEntity(reservationToCreate);
         entityToSave.setStatus(ReservationStatus.PENDING);
         var savedEntity = repository.save(entityToSave);
@@ -113,7 +121,7 @@ public class ReservationService {
             Reservation reservationToUpdate)
     {
         var reservationEntity = repository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Reservation not found by id: " + id));
+                .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));
 
         if(reservationEntity.getStatus() != ReservationStatus.PENDING){
             throw new IllegalStateException("Reservation status cannot be modified, status is=" + reservationEntity.getStatus());
@@ -135,12 +143,12 @@ public class ReservationService {
     @Transactional
     public void cancelReservation(Long id) {
         var reservation = repository.findById(id)
-                        .orElseThrow(() -> new EntityNotFoundException("Reservation not found by id: " + id));
+                        .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));
         if(reservation.getStatus().equals(ReservationStatus.APPROVED)){
-            throw new IllegalStateException("Reservation status cannot be cancelled, status is approved");
+            throw new InvalidReservationStatusException("Reservation status cannot be cancelled, status is approved");
         }
         if(reservation.getStatus().equals(ReservationStatus.CANCELED)){
-            throw new IllegalStateException("Reservation status cannot be cancelled, status is already cancelled");
+            throw new InvalidReservationStatusException("Reservation status cannot be cancelled, status is already cancelled");
         }
         repository.setStatus(id, ReservationStatus.CANCELED);
         requestCounterService.increment();
@@ -151,10 +159,10 @@ public class ReservationService {
     @Async
     public CompletableFuture<Reservation> approveReservation(Long id) {
         var reservationEntity = repository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Reservation not found by id: " + id));
+                .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));
 
         if(reservationEntity.getStatus() != ReservationStatus.PENDING){
-            throw new IllegalStateException("Cannot approve reservation: status=" + reservationEntity.getStatus());
+            throw new InvalidReservationStatusException("Cannot approve reservation: status=" + reservationEntity.getStatus());
         }
         var isAvailable = reservationAvailabilityService.isReservationAvailable(
                 reservationEntity.getRoomId(),
@@ -162,7 +170,7 @@ public class ReservationService {
                 reservationEntity.getEndDate()
         );
         if(!isAvailable){
-            throw new IllegalStateException("Cannot approve reservation: isAvailable");
+            throw new InvalidReservationStatusException("Cannot approve reservation: isAvailable");
         }
 
         reservationEntity.setStatus(ReservationStatus.APPROVED);

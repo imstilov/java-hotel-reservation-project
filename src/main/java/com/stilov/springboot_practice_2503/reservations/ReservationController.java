@@ -2,12 +2,14 @@ package com.stilov.springboot_practice_2503.reservations;
 
 import com.stilov.springboot_practice_2503.search_filters.GroupByUserAndStatus;
 import com.stilov.springboot_practice_2503.search_filters.ReservationSearchFilter;
+import com.stilov.springboot_practice_2503.web.ApiResponse;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -23,13 +25,13 @@ public class ReservationController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Reservation> getReservationByUserId(@PathVariable("id") Long id) {
+    public ResponseEntity<ApiResponse<Reservation>> getReservationByUserId(@PathVariable("id") Long id) {
             log.info("Called getReservationById with id " + id);
-            return ResponseEntity.ok().body(reservationService.getReservationById(id));
+            return ResponseEntity.ok(ApiResponse.responseOk(reservationService.getReservationById(id), "Reservation found successfully."));
     }
 
     @GetMapping
-    public ResponseEntity<List<Reservation>> getAllReservations(
+    public ResponseEntity<ApiResponse<List<Reservation>>> getAllReservations(
             @RequestParam(name = "roomId", required = false) Long roomId,
             @RequestParam(name = "userId", required = false)Long userId,
             @RequestParam(name = "pageSize", required = false)Integer pageSize,
@@ -42,11 +44,12 @@ public class ReservationController {
                 pageSize,
                 pageNumber
         );
-        return ResponseEntity.ok(reservationService.searchAllByFilter(filter));
+        return ResponseEntity.ok(ApiResponse.responseOk(reservationService.searchAllByFilter(filter),
+                "Reservations found successfully."));
     }
 
     @GetMapping("/groupby")
-    public ResponseEntity<List<Reservation>> groupByUserIdAndStatus(
+    public ResponseEntity<ApiResponse<List<Reservation>>> groupByUserIdAndStatus(
             @RequestParam(name = "userId") Long userId,
             @RequestParam(name = "status") ReservationStatus status,
             @RequestParam(name = "pageSize", required = false) Integer pageSize,
@@ -59,35 +62,38 @@ public class ReservationController {
                 pageSize,
                 pageNumber
         );
-        return ResponseEntity.ok(reservationService.groupByStatusAndUserId(filter));
+        return ResponseEntity.ok(ApiResponse.responseOk(reservationService.groupByStatusAndUserId(filter),
+                "Reservations found successfully."));
     }
 
 
     @PostMapping
-    public ResponseEntity<Reservation> createReservation(@RequestBody @Valid Reservation reservationToCreate){
+    public ResponseEntity<ApiResponse<Reservation>> createReservation(@RequestBody @Valid Reservation reservationToCreate){
         log.info("Called createReservation");
-        return ResponseEntity.ok().header("test-header", "123").body(reservationService.createReservation(reservationToCreate));
+        return ResponseEntity.ok(ApiResponse
+                .responseOk(reservationService.createReservation(reservationToCreate),
+                        "Reservation created successfully."));
     };
 
     @PutMapping("/{id}")
-    public ResponseEntity<Reservation> updateReservation(@PathVariable("id") Long id, @RequestBody Reservation reservationToUpdate){
+    public ResponseEntity<ApiResponse<Reservation>> updateReservation(@PathVariable("id") Long id, @RequestBody Reservation reservationToUpdate){
         log.info("Called updateReservation id={}, reservationToUpdate={}", id, reservationToUpdate);
         var updated = reservationService.updateReservation(id, reservationToUpdate);
-        return ResponseEntity.ok().body(updated);
-
-    }
-
-    @DeleteMapping("/{id}/cancel")
-    public ResponseEntity<Void> cancelReservation(@PathVariable("id") Long id){
-        log.info("Called cancelReservation id={}", id);
-            reservationService.cancelReservation(id);
-            return ResponseEntity.ok().build();
+        return ResponseEntity.ok(ApiResponse.responseOk(updated,
+                "Reservation updated successfully"));
     }
 
     @PostMapping("/{id}/approve")
-    public ResponseEntity<Reservation> approveReservation(@PathVariable("id") Long id){
+    public ResponseEntity<ApiResponse<Reservation>> approveReservation(@PathVariable("id") Long id){
         log.info("Called approveReservation id={}", id);
         var reservation = reservationService.approveReservation(id);
-        return ResponseEntity.ok(reservation);
+        return ResponseEntity.ok(ApiResponse.responseOk(reservation, "Reservation approved successfully."));
+    }
+
+    @DeleteMapping("/{id}/cancel")
+    public ResponseEntity<ApiResponse<Void>> cancelReservation(@PathVariable("id") Long id){
+        log.info("Called cancelReservation id={}", id);
+            reservationService.cancelReservation(id);
+            return ResponseEntity.ok(ApiResponse.responseOk("Reservation deleted successfully."));
     }
 }

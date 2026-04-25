@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface ReservationRepository extends JpaRepository<ReservationEntity, Long> {
 
@@ -71,5 +72,15 @@ public interface ReservationRepository extends JpaRepository<ReservationEntity, 
             @Param("roomId") Long roomId,
             @Param("userId") Long userId,
             Pageable pageable
+    );
+
+    @Query("""
+    SELECT r from ReservationEntity r
+    WHERE r.userId = :userId
+    AND r.status = :status
+""")
+    List<ReservationEntity> groupByUserIdAndStatus(
+            @Param("userId") Long userId,
+            @Param("status") ReservationStatus status
     );
 }

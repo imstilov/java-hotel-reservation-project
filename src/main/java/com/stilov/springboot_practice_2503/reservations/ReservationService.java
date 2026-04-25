@@ -44,6 +44,22 @@ public class ReservationService {
     }
 
 
+    public Reservation getReservationById(Long id) {
+        ReservationEntity reservationEntity = repository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Reservation not found by id: " + id));
+
+        return mapper.toDomain(reservationEntity);
+    };
+
+
+    public List<Reservation> groupByStatusAndUserId(Long userId, ReservationStatus status) {
+        List<ReservationEntity> allEntities = repository.groupByUserIdAndStatus(userId, status);
+                // .orElseThrow(() -> new EntityNotFoundException("No reservations found by userId: " + userId));
+
+        return allEntities.stream()
+                .map(mapper::toDomain).toList();
+    };
+
 
     public Reservation createReservation(Reservation reservationToCreate) {
         if(reservationToCreate.status() != null){
@@ -83,14 +99,6 @@ public class ReservationService {
         return mapper.toDomain(updatedReservation);
 
     }
-
-
-    public Reservation getReservationById(Long id) {
-        ReservationEntity reservationEntity = repository.findById(id).orElseThrow(() -> new EntityNotFoundException("Reservation not found by id: " + id));
-
-        return mapper.toDomain(reservationEntity);
-    };
-
 
     @Transactional
     public void cancelReservation(Long id) {

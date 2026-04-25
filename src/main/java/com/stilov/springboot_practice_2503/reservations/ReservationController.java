@@ -43,6 +43,15 @@ public class ReservationController {
         return ResponseEntity.ok(reservationService.searchAllByFilter(filter));
     }
 
+    @GetMapping("/groupby")
+    public ResponseEntity<List<Reservation>> groupByUserIdAndStatus(
+            @RequestParam(name = "userId") Long userId,
+            @RequestParam(name = "status") ReservationStatus status
+    ){
+        log.info("Called groupByStatusAndUserId");
+        return ResponseEntity.ok(reservationService.groupByStatusAndUserId(userId, status));
+    }
+
     @PostMapping
     public ResponseEntity<Reservation> createReservation(@RequestBody @Valid Reservation reservationToCreate){
         log.info("Called createReservation");

@@ -1,5 +1,6 @@
 package com.stilov.springboot_practice_2503.reservations;
 
+import com.stilov.springboot_practice_2503.reservations.stats.ReservationStats;
 import com.stilov.springboot_practice_2503.search_filters.GroupByUserAndStatus;
 import com.stilov.springboot_practice_2503.search_filters.ReservationSearchFilter;
 import com.stilov.springboot_practice_2503.web.ApiResponse;
@@ -9,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -46,6 +48,12 @@ public class ReservationController {
         );
         return ResponseEntity.ok(ApiResponse.responseOk(reservationService.searchAllByFilter(filter),
                 "Reservations found successfully."));
+    }
+
+    @GetMapping("/stats")
+    public ResponseEntity<ApiResponse<ReservationStats>> getReservationStats(){
+        log.info("Called getReservationStats");
+        return ResponseEntity.ok(ApiResponse.responseOk(reservationService.getCountStats(), "Reservation stats found successfully."));
     }
 
     @GetMapping("/groupby")

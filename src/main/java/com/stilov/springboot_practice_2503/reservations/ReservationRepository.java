@@ -64,7 +64,7 @@ public interface ReservationRepository extends JpaRepository<ReservationEntity, 
             @Param("status")ReservationStatus status);
 
     @Query("""
-    SELECT r from ReservationEntity r
+    SELECT r FROM ReservationEntity r
                 WHERE (:roomId IS NULL OR r.roomId = :roomId)
                 AND (:userId IS NULL OR r.userId = :userId)
 """)
@@ -75,7 +75,7 @@ public interface ReservationRepository extends JpaRepository<ReservationEntity, 
     );
 
     @Query("""
-    SELECT r from ReservationEntity r
+    SELECT r FROM ReservationEntity r
         WHERE r.userId = :userId
         AND r.status = :status
 """)
@@ -83,5 +83,13 @@ public interface ReservationRepository extends JpaRepository<ReservationEntity, 
             @Param("userId") Long userId,
             @Param("status") ReservationStatus status,
             Pageable pageable
+    );
+
+    @Query("""
+    SELECT COUNT(r) FROM ReservationEntity r
+    WHERE r.startDate >= :startDate
+""")
+    Integer countByPeriod(
+            @Param("startDate") LocalDate startDate
     );
 }

@@ -1,6 +1,8 @@
 package com.stilov.springboot_practice_2503.reservations;
 
 import com.stilov.springboot_practice_2503.reservations.availability.ReservationAvailabilityService;
+import com.stilov.springboot_practice_2503.reservations.stats.RequestCounterService;
+import com.stilov.springboot_practice_2503.reservations.stats.ReservationStats;
 import com.stilov.springboot_practice_2503.search_filters.GroupByUserAndStatus;
 import com.stilov.springboot_practice_2503.search_filters.ReservationSearchFilter;
 import jakarta.persistence.EntityNotFoundException;
@@ -10,6 +12,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.*;
 
 @Service
@@ -22,10 +26,16 @@ public class ReservationService {
 
     private final ReservationMapper mapper;
 
-    public ReservationService(ReservationRepository repository, ReservationMapper mapper,  ReservationAvailabilityService reservationAvailabilityService) {
+    private final RequestCounterService requestCounterService;
+
+    public ReservationService(ReservationRepository repository,
+                              ReservationMapper mapper,
+                              ReservationAvailabilityService reservationAvailabilityService,
+                              RequestCounterService requestCounterService) {
         this.repository = repository;
         this.mapper = mapper;
         this.reservationAvailabilityService = reservationAvailabilityService;
+        this.requestCounterService = requestCounterService;
     }
 
 
@@ -40,7 +50,7 @@ public class ReservationService {
                 .ofSize(pageSize)
                 .withPage(pageNumber);
         List<ReservationEntity> allEntities = repository.searchAllByFilter(filter.roomId(), filter.userId(), pageable);
-
+        requestCounterService.increment();
         return allEntities.stream()
                 .map(mapper::toDomain).toList();
     }
@@ -58,7 +68,7 @@ public class ReservationService {
                 .ofSize(pageSize)
                 .withPage(pageNumber);
         List<ReservationEntity> allEntities = repository.groupByUserIdAndStatus(filter.userId(), filter.status(), pageable);
-
+        requestCounterService.increment();
         return allEntities.stream()
                 .map(mapper::toDomain).toList();
     };
@@ -70,6 +80,14 @@ public class ReservationService {
 
         return mapper.toDomain(reservationEntity);
     };
+
+    public ReservationStats getCountStats(){
+        var startDate = LocalDate.now().withDayOfMonth(1);
+        var countByPeriod = repository.countByPeriod(startDate);
+        var getRequestsCount = requestCounterService.getCount();
+        requestCounterService.increment();
+        return new ReservationStats(getRequestsCount, countByPeriod);
+    }
 
 
     public Reservation createReservation(Reservation reservationToCreate) {
@@ -83,6 +101,7 @@ public class ReservationService {
         var entityToSave = mapper.toEntity(reservationToCreate);
         entityToSave.setStatus(ReservationStatus.PENDING);
         var savedEntity = repository.save(entityToSave);
+        requestCounterService.increment();
         return mapper.toDomain(savedEntity);
     }
 
@@ -106,7 +125,7 @@ public class ReservationService {
         reservationToSave.setStatus(ReservationStatus.PENDING);
 
         var updatedReservation = repository.save(reservationToSave);
-
+        requestCounterService.increment();
         return mapper.toDomain(updatedReservation);
 
     }
@@ -122,6 +141,7 @@ public class ReservationService {
             throw new IllegalStateException("Reservation status cannot be cancelled, status is already cancelled");
         }
         repository.setStatus(id, ReservationStatus.CANCELED);
+        requestCounterService.increment();
         log.info("Reservation has been cancelled by user: id={}", id);
     }
 
@@ -144,7 +164,7 @@ public class ReservationService {
 
         reservationEntity.setStatus(ReservationStatus.APPROVED);
         repository.save(reservationEntity);
-
+        requestCounterService.increment();
         return mapper.toDomain(reservationEntity);
     }
 }

@@ -17,50 +17,47 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponseDto> handleGenericException(Exception e) {
+    public ResponseEntity<ApiResponse<Void>> handleGenericException(Exception e) {
         log.error("Handle exception", e);
 
-        var errorDto = new ErrorResponseDto(
+        var errorResponse = ApiResponse.<Void>responseError(
                 "Internal server error",
-                e.getMessage(),
-                LocalDateTime.now()
+                e.getMessage()
         );
 
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(errorDto);
+                .body(errorResponse);
     }
 
     @ExceptionHandler(EntityNotFoundException.class)
-    public ResponseEntity<ErrorResponseDto> handleEntityNotFound(EntityNotFoundException e) {
+    public ResponseEntity<ApiResponse<Void>> handleEntityNotFound(EntityNotFoundException e) {
         log.error("Handle EntityNotFoundException", e);
 
-        var errorDto = new ErrorResponseDto(
+        var errorResponse = ApiResponse.<Void>responseError(
                 "Entity not found",
-                e.getMessage(),
-                LocalDateTime.now()
+                e.getMessage()
         );
 
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
-                .body(errorDto);
+                .body(errorResponse);
     }
 
     @ExceptionHandler(exception = { IllegalArgumentException.class,
                                     IllegalStateException.class,
                                     MethodArgumentNotValidException.class
     })
-    public ResponseEntity<ErrorResponseDto> handleBadRequest(IllegalArgumentException e) {
+    public ResponseEntity<ApiResponse<Void>> handleBadRequest(IllegalArgumentException e) {
         log.error("HandleBadRequest", e);
 
-        var errorDto = new ErrorResponseDto(
+        var errorResponse = ApiResponse.<Void>responseError(
                 "Bad request",
-                e.getMessage(),
-                LocalDateTime.now()
+                e.getMessage()
         );
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(errorDto);
+                .body(errorResponse);
     }
 }

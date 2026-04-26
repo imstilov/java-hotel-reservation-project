@@ -26,13 +26,13 @@ public class ReservationController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<Reservation>> getReservationByUserId(@PathVariable("id") Long id) {
+    public ResponseEntity<ApiResponse<ReservationDTO>> getReservationByUserId(@PathVariable("id") Long id) {
             log.info("Called getReservationById with id " + id);
             return ResponseEntity.ok(ApiResponse.responseOk(reservationService.getReservationById(id), "Reservation found successfully."));
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<Reservation>>> getAllReservations(
+    public ResponseEntity<ApiResponse<List<ReservationDTO>>> getAllReservations(
             @RequestParam(name = "roomId", required = false) Long roomId,
             @RequestParam(name = "userId", required = false)Long userId,
             @RequestParam(name = "pageSize", required = false)Integer pageSize,
@@ -56,7 +56,7 @@ public class ReservationController {
     }
 
     @GetMapping("/groupby")
-    public ResponseEntity<ApiResponse<List<Reservation>>> groupByUserIdAndStatus(
+    public ResponseEntity<ApiResponse<List<ReservationDTO>>> groupByUserIdAndStatus(
             @RequestParam(name = "userId") Long userId,
             @RequestParam(name = "status") ReservationStatus status,
             @RequestParam(name = "pageSize", required = false) Integer pageSize,
@@ -75,27 +75,27 @@ public class ReservationController {
 
 
     @PostMapping
-    public ResponseEntity<ApiResponse<Reservation>> createReservation(@RequestBody @Valid Reservation reservationToCreate){
+    public ResponseEntity<ApiResponse<ReservationDTO>> createReservation(@RequestBody @Valid ReservationDTO reservationDTOToCreate){
         log.info("Called createReservation");
         return ResponseEntity.ok(ApiResponse
-                .responseOk(reservationService.createReservation(reservationToCreate),
+                .responseOk(reservationService.createReservation(reservationDTOToCreate),
                         "Reservation created successfully."));
     };
 
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<Reservation>> updateReservation(@PathVariable("id") Long id, @RequestBody Reservation reservationToUpdate){
-        log.info("Called updateReservation id={}, reservationToUpdate={}", id, reservationToUpdate);
-        var updated = reservationService.updateReservation(id, reservationToUpdate);
+    public ResponseEntity<ApiResponse<ReservationDTO>> updateReservation(@PathVariable("id") Long id, @RequestBody ReservationDTO reservationDTOToUpdate){
+        log.info("Called updateReservation id={}, reservationToUpdate={}", id, reservationDTOToUpdate);
+        var updated = reservationService.updateReservation(id, reservationDTOToUpdate);
         return ResponseEntity.ok(ApiResponse.responseOk(updated,
                 "Reservation updated successfully"));
     }
 
     @PostMapping("/{id}/approve")
-    public CompletableFuture<ResponseEntity<ApiResponse<Reservation>>> approveReservation(@PathVariable("id") Long id){
+    public CompletableFuture<ResponseEntity<ApiResponse<ReservationDTO>>> approveReservation(@PathVariable("id") Long id){
         log.info("Called approveReservation id={}", id);
         return reservationService.approveReservation(id)
-                .thenApply(reservation -> ResponseEntity.ok(
-                        ApiResponse.responseOk(reservation, "Reservation approved successfully.")
+                .thenApply(reservationDTO -> ResponseEntity.ok(
+                        ApiResponse.responseOk(reservationDTO, "Reservation approved successfully.")
                 ));
     }
 

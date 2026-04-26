@@ -8,7 +8,6 @@ import com.stilov.springboot_practice_2503.search_filters.ReservationSearchFilte
 import com.stilov.springboot_practice_2503.web.exceptions.InvalidReservationStatusException;
 import com.stilov.springboot_practice_2503.web.exceptions.ReservationNotFoundException;
 import com.stilov.springboot_practice_2503.web.exceptions.RoomNotAvailableException;
-import jakarta.persistence.EntityNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
@@ -17,7 +16,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.YearMonth;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
@@ -44,7 +42,7 @@ public class ReservationService {
     }
 
 
-    public List<Reservation> searchAllByFilter(
+    public List<ReservationDTO> searchAllByFilter(
             ReservationSearchFilter filter
     ) {
     int pageSize = filter.pageSize() != null
@@ -61,7 +59,7 @@ public class ReservationService {
     }
 
 
-    public List<Reservation> groupByStatusAndUserId(
+    public List<ReservationDTO> groupByStatusAndUserId(
             GroupByUserAndStatus filter) {
         int pageSize = filter.pageSize() != null
                 ? filter.pageSize()
@@ -79,7 +77,7 @@ public class ReservationService {
     };
 
 
-    public Reservation getReservationById(Long id) {
+    public ReservationDTO getReservationById(Long id) {
         ReservationEntity reservationEntity = repository.findById(id)
                 .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));
 
@@ -95,20 +93,20 @@ public class ReservationService {
     }
 
 
-    public Reservation createReservation(Reservation reservationToCreate) {
-        if(reservationToCreate.status() != null){
+    public ReservationDTO createReservation(ReservationDTO reservationDTOToCreate) {
+        if(reservationDTOToCreate.status() != null){
             throw new IllegalArgumentException("Reservation status must be null");
         }
-        if(!reservationToCreate.endDate().isAfter(reservationToCreate.startDate())){
+        if(!reservationDTOToCreate.endDate().isAfter(reservationDTOToCreate.startDate())){
             throw new IllegalArgumentException("Reservation end date must be after start date");
         }
-        if(!reservationAvailabilityService.isReservationAvailable(  reservationToCreate.roomId(),
-                                                                    reservationToCreate.startDate(),
-                                                                    reservationToCreate.endDate()
+        if(!reservationAvailabilityService.isReservationAvailable(  reservationDTOToCreate.roomId(),
+                                                                    reservationDTOToCreate.startDate(),
+                                                                    reservationDTOToCreate.endDate()
                                                                     )){
-            throw new RoomNotAvailableException(reservationToCreate.roomId());
+            throw new RoomNotAvailableException(reservationDTOToCreate.roomId());
         }
-        var entityToSave = mapper.toEntity(reservationToCreate);
+        var entityToSave = mapper.toEntity(reservationDTOToCreate);
         entityToSave.setStatus(ReservationStatus.PENDING);
         var savedEntity = repository.save(entityToSave);
         requestCounterService.increment();
@@ -116,9 +114,9 @@ public class ReservationService {
     }
 
 
-    public Reservation updateReservation(
+    public ReservationDTO updateReservation(
             Long id,
-            Reservation reservationToUpdate)
+            ReservationDTO reservationDTOToUpdate)
     {
         var reservationEntity = repository.findById(id)
                 .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));
@@ -126,11 +124,11 @@ public class ReservationService {
         if(reservationEntity.getStatus() != ReservationStatus.PENDING){
             throw new IllegalStateException("Reservation status cannot be modified, status is=" + reservationEntity.getStatus());
         }
-        if(!reservationToUpdate.endDate().isAfter(reservationToUpdate.startDate())){
+        if(!reservationDTOToUpdate.endDate().isAfter(reservationDTOToUpdate.startDate())){
             throw new IllegalArgumentException("Reservation end date must be after start date");
         }
 
-        var reservationToSave = mapper.toEntity(reservationToUpdate);
+        var reservationToSave = mapper.toEntity(reservationDTOToUpdate);
         reservationToSave.setId(reservationEntity.getId());
         reservationToSave.setStatus(ReservationStatus.PENDING);
 
@@ -157,7 +155,7 @@ public class ReservationService {
 
 
     @Async
-    public CompletableFuture<Reservation> approveReservation(Long id) {
+    public CompletableFuture<ReservationDTO> approveReservation(Long id) {
         var reservationEntity = repository.findById(id)
                 .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));
 
@@ -176,7 +174,7 @@ public class ReservationService {
         reservationEntity.setStatus(ReservationStatus.APPROVED);
         repository.save(reservationEntity);
         requestCounterService.increment();
-        Reservation result = mapper.toDomain(reservationEntity);
+        ReservationDTO result = mapper.toDomain(reservationEntity);
         return CompletableFuture.completedFuture(result);
     }
 }

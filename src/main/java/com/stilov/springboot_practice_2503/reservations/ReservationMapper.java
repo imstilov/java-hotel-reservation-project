@@ -5,8 +5,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class ReservationMapper {
 
-    public Reservation toDomain(ReservationEntity reservation) {
-        return new Reservation(
+    public ReservationDTO toDomain(ReservationEntity reservation) {
+        return new ReservationDTO(
                 reservation.getId(),
                 reservation.getUserId(),
                 reservation.getRoomId(),
@@ -17,14 +17,14 @@ public class ReservationMapper {
     }
 
 
-    public ReservationEntity toEntity(Reservation reservation) {
+    public ReservationEntity toEntity(ReservationDTO reservationDTO) {
         return new ReservationEntity(
-                reservation.id(),
-                reservation.userId(),
-                reservation.roomId(),
-                reservation.startDate(),
-                reservation.endDate(),
-                reservation.status()
+                reservationDTO.id(),
+                reservationDTO.userId(),
+                reservationDTO.roomId(),
+                reservationDTO.startDate(),
+                reservationDTO.endDate(),
+                reservationDTO.status()
         );
     }
 

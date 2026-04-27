@@ -10,9 +10,13 @@ import com.stilov.springboot_practice_2503.web.exceptions.ReservationNotFoundExc
 import com.stilov.springboot_practice_2503.web.exceptions.RoomNotAvailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.CannotSerializeTransactionException;
 import org.springframework.data.domain.Pageable;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -155,6 +159,12 @@ public class ReservationService {
 
 
     @Async
+    @Retryable(
+            value = CannotSerializeTransactionException.class,
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 50, multiplier = 2)
+    )
+    @Transactional(isolation = Isolation.SERIALIZABLE)
     public CompletableFuture<ReservationDTO> approveReservation(Long id) {
         var reservationEntity = repository.findById(id)
                 .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));

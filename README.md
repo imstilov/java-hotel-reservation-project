@@ -149,7 +149,7 @@ ReservationException (base, extends RuntimeException)
 
 ## Phase 2 — Database, Indexes & Migrations
 
-### 2.1 Switching from ddl-auto=update to Flyway
+### 2.4 Switching from ddl-auto=update to Flyway
 
 The project initially used `spring.jpa.hibernate.ddl-auto=update`, where Hibernate creates and modifies tables based on `@Entity` annotations at startup. This is convenient for prototyping but unacceptable for any environment beyond a local sandbox:
 
@@ -167,7 +167,7 @@ Replaced with **Flyway** — schema is now managed through versioned SQL files i
 
 ---
 
-### 2.2 V1 — Initial schema with constraints
+#### V1 — Initial schema with constraints
 
 The initial migration creates the `reservations` table with explicit constraints rather than relying solely on application-level validation:
 
@@ -201,7 +201,7 @@ The `reservations_dates_check` constraint also doubles as a safety net against a
 
 ---
 
-### 2.3 V2 — Indexes targeting real query patterns
+### 2.1 V2 — Indexes targeting real query patterns
 
 Three indexes were added based on actual query patterns rather than guessing:
 
@@ -233,7 +233,7 @@ CREATE INDEX idx_reservations_active
 
 ---
 
-### 2.4 Performance verification under load
+#### Performance verification under load
 
 Loaded 100k synthetic reservations using `generate_series` in PostgreSQL. The data is spread across 180 unique rooms (floors 1–9, 20 rooms per floor — `101..120, 201..220, ..., 901..920`) and ~5000 unique users, with start dates spanning a 2-year window.
 
@@ -251,7 +251,7 @@ The third row reveals an important nuance: **PostgreSQL ignores the index when t
 
 ---
 
-### 2.5 Entity-schema synchronization
+#### Entity-schema synchronization
 
 Switching to `ddl-auto=validate` requires `ReservationEntity` to exactly match the table schema. Updated all `@Column` annotations to declare nullability explicitly:
 
@@ -311,6 +311,101 @@ The mapping layer between them is trivial and worth the small amount of glue cod
 Schema is part of the application's contract with the database. The application requires specific tables, columns, and constraints to function — that requirement belongs in source control alongside the code that depends on it. A repository that builds without its schema is incomplete, the same way a project without its `pom.xml` is incomplete.
 
 This also means a fresh clone on a new machine boots with a single command: start PostgreSQL, run the app, Flyway creates the schema. No setup scripts to share, no Slack messages with `CREATE TABLE` statements.
+
+---
+
+### 2.2 ACID, Transaction Isolation & Concurrency Testing
+
+#### The race condition in approveReservation
+
+The original `approveReservation()` had no transaction boundary. Each internal operation — `findById`, `isAvailable` (conflict check), `save` — ran in its own implicit transaction. This created a classic **TOCTOU (Time-of-Check to Time-of-Use)** race condition:
+
+```
+Thread A: isAvailable() → no conflicts found ✅
+Thread B: isAvailable() → no conflicts found ✅  ← sees stale state
+Thread A: save() → APPROVED
+Thread B: save() → APPROVED  ← double approval, ACID violation
+```
+
+Both threads passed the availability check before either committed, so both saw "room is free" and both approved. The result: two overlapping reservations both in `APPROVED` state — a corrupted booking.
+
+---
+
+#### Fix — SERIALIZABLE isolation + @Retryable
+
+Added `@Transactional(isolation = Isolation.SERIALIZABLE)` to `approveReservation`. SERIALIZABLE is the strictest isolation level — PostgreSQL uses **SSI (Serializable Snapshot Isolation)** which tracks read/write dependencies between concurrent transactions. When two transactions read the same range and both write into it, PostgreSQL detects a dependency cycle and aborts one at commit time.
+
+Confirmed by the transaction log:
+
+```
+Initiating transaction rollback after commit exception
+
+CannotAcquireLockException: Unable to commit against JDBC Connection;
+ERROR: could not serialize access due to read/write dependencies among transactions
+Reason code: Canceled on identification as a pivot, during commit attempt.
+Hint: The transaction might succeed if retried.
+
+Rolling back JPA transaction on EntityManager [SessionImpl(813175210<open>)]
+```
+
+PostgreSQL itself hints that the transaction should be retried — which is exactly what `@Retryable` does:
+
+```java
+@Retryable(
+    value = CannotSerializeTransactionException.class,
+    maxAttempts = 3,
+    backoff = @Backoff(delay = 50, multiplier = 2)
+)
+@Transactional(isolation = Isolation.SERIALIZABLE)
+public ReservationDTO approveReservation(Long id) { ... }
+```
+
+On retry, the losing transaction tries again. By that time the first transaction has already committed its `APPROVED` reservation, so the conflict check returns "room is occupied" and the retry correctly throws `InvalidReservationStatusException` instead of creating a duplicate approval.
+
+---
+
+#### Why @Async and @Retryable can't share a method
+
+`@Async` and `@Retryable` on the same method conflict at the Spring proxy level:
+
+- `@Retryable` works by catching exceptions thrown at the **call site** — it wraps the method call and retries on failure.
+- `@Async` returns a `CompletableFuture` **immediately** to the caller. The actual execution happens in a separate thread, and any exception is captured inside the future — never thrown at the call site.
+- Result: `@Retryable` waits for an exception that never arrives. The retry logic is dead code.
+
+`@Transactional` does not have this problem because it acts **inside** the async thread — it wraps the execution of the method body, not the call site. Spring opens the transaction in the thread where the method actually runs, which is correct.
+
+---
+
+#### Architecture — splitting async dispatch from business logic
+
+The solution is to separate the two concerns into two different Spring beans. Self-invocation (`this.method()`) bypasses Spring's proxy, so the split must be between beans:
+
+```
+ReservationController
+        ↓
+AsyncApproveHandler.approveReservationAsync()   ← @Async only
+        ↓ calls via Spring proxy
+ReservationService.approveReservation()          ← @Retryable + @Transactional(SERIALIZABLE)
+```
+
+`AsyncApproveHandler` is a `@Service` bean injected into the controller. It has one job: dispatch the approval to Spring's async thread pool and return a `CompletableFuture`. `ReservationService.approveReservation` is now a plain synchronous method with the full transaction and retry logic. Called from outside its own bean, it goes through the proxy — both `@Retryable` and `@Transactional` fire correctly.
+
+---
+
+#### Concurrency test — forcing the race condition deterministically
+
+A standard unit test can't reliably reproduce a race condition — threads often run sequentially by chance and the test passes for the wrong reason. The test uses two mechanisms to force genuine concurrency:
+
+**`@MockitoSpyBean` + `CyclicBarrier`** — a spy wraps `ReservationAvailabilityService` without changing its behavior. A `doAnswer` intercept calls the real `isAvailable()`, then blocks at a `CyclicBarrier(2)`. The barrier requires both threads to arrive before releasing either. This guarantees both threads complete the availability check (both see "no conflicts") before either proceeds to `save()` — the exact race condition scenario.
+
+```
+Thread A: isAvailable() → empty ✅ → waits at barrier...
+Thread B: isAvailable() → empty ✅ → arrives at barrier → both released simultaneously
+Thread A: save() → attempts commit
+Thread B: save() → attempts commit → PostgreSQL aborts one with serialization error
+```
+
+**Test assertion:** `assertTrue(successCount.get() < 2)` — verifies the ACID invariant. Zero successes is also valid (both aborted in a symmetric conflict); with retry logic wired in, eventually one succeeds.
 
 ---
 

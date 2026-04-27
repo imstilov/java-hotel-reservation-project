@@ -14,14 +14,12 @@ import org.springframework.dao.CannotSerializeTransactionException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 
 @Service
 public class ReservationService {
@@ -158,14 +156,13 @@ public class ReservationService {
     }
 
 
-    @Async
     @Retryable(
             value = CannotSerializeTransactionException.class,
             maxAttempts = 3,
             backoff = @Backoff(delay = 50, multiplier = 2)
     )
     @Transactional(isolation = Isolation.SERIALIZABLE)
-    public CompletableFuture<ReservationDTO> approveReservation(Long id) {
+    public ReservationDTO approveReservation(Long id) {
         var reservationEntity = repository.findById(id)
                 .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));
 
@@ -185,6 +182,6 @@ public class ReservationService {
         repository.save(reservationEntity);
         requestCounterService.increment();
         ReservationDTO result = mapper.toDomain(reservationEntity);
-        return CompletableFuture.completedFuture(result);
+        return result;
     }
 }

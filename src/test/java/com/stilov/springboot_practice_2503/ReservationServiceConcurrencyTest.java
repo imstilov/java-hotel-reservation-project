@@ -78,14 +78,14 @@ class ReservationServiceConcurrencyTest {
 
         executor.submit(() -> {
             try {
-                service.approveReservation(id1).get();
+                service.approveReservation(id1);
                 successCount.incrementAndGet();
             } catch (Exception ignored) {}
         });
 
         executor.submit(() -> {
             try {
-                service.approveReservation(id2).get();
+                service.approveReservation(id2);
                 successCount.incrementAndGet();
             } catch (Exception ignored) {}
         });

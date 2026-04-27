@@ -1,5 +1,6 @@
 package com.stilov.springboot_practice_2503.reservations;
 
+import com.stilov.springboot_practice_2503.asyncConfig.AsyncApproveHandler;
 import com.stilov.springboot_practice_2503.reservations.stats.ReservationStats;
 import com.stilov.springboot_practice_2503.search_filters.GroupByUserAndStatus;
 import com.stilov.springboot_practice_2503.search_filters.ReservationSearchFilter;
@@ -21,8 +22,11 @@ public class ReservationController {
 
     private final ReservationService reservationService;
 
-    public ReservationController(ReservationService reservationService) {
+    private final AsyncApproveHandler asyncApproveHandler;
+
+    public ReservationController(ReservationService reservationService, AsyncApproveHandler asyncApproveHandler) {
         this.reservationService = reservationService;
+        this.asyncApproveHandler = asyncApproveHandler;
     }
 
     @GetMapping("/{id}")
@@ -93,7 +97,7 @@ public class ReservationController {
     @PostMapping("/{id}/approve")
     public CompletableFuture<ResponseEntity<ApiResponse<ReservationDTO>>> approveReservation(@PathVariable("id") Long id){
         log.info("Called approveReservation id={}", id);
-        return reservationService.approveReservation(id)
+        return asyncApproveHandler.approveReservationAsync(id)
                 .thenApply(reservationDTO -> ResponseEntity.ok(
                         ApiResponse.responseOk(reservationDTO, "Reservation approved successfully.")
                 ));

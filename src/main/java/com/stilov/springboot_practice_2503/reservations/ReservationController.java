@@ -35,6 +35,12 @@ public class ReservationController {
             return ResponseEntity.ok(ApiResponse.responseOk(reservationService.getReservationById(id), "Reservation found successfully."));
     }
 
+    @GetMapping("/themostpopular/top3")
+    public ResponseEntity<ApiResponse<List<Long>>> getTop3Reservations(){
+        log.info("Called getTop3Reservations controller method");
+        return ResponseEntity.ok(ApiResponse.responseOk(reservationService.getMostPopularRooms(), "Reservations were found successfully."));
+    }
+
     @GetMapping
     public ResponseEntity<ApiResponse<List<ReservationDTO>>> getAllReservations(
             @RequestParam(name = "roomId", required = false) Long roomId,

@@ -93,8 +93,6 @@ class ReservationServiceConcurrencyTest {
         executor.shutdown();
         executor.awaitTermination(15, TimeUnit.SECONDS);
 
-        // 0 is valid: SERIALIZABLE aborted both due to symmetric conflict (retry logic will fix this)
-        // 2 is invalid: ACID violation — both overlapping reservations approved simultaneously
         assertTrue(successCount.get() < 2,
                 "ACID violation: both overlapping reservations were approved simultaneously");
     }

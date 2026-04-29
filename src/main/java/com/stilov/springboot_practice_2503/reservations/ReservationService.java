@@ -43,7 +43,7 @@ public class ReservationService {
         this.requestCounterService = requestCounterService;
     }
 
-
+    @Transactional(readOnly = true)
     public List<ReservationDTO> searchAllByFilter(
             ReservationSearchFilter filter
     ) {
@@ -60,7 +60,7 @@ public class ReservationService {
                 .map(mapper::toDomain).toList();
     }
 
-
+    @Transactional(readOnly = true)
     public List<ReservationDTO> groupByStatusAndUserId(
             GroupByUserAndStatus filter) {
         int pageSize = filter.pageSize() != null
@@ -78,7 +78,13 @@ public class ReservationService {
                 .map(mapper::toDomain).toList();
     };
 
+    @Transactional(readOnly = true)
+    public List<Long> getMostPopularRooms(){
+      requestCounterService.increment();
+      return repository.findTop3PopularRooms();
+    };
 
+    @Transactional(readOnly = true)
     public ReservationDTO getReservationById(Long id) {
         ReservationEntity reservationEntity = repository.findById(id)
                 .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));

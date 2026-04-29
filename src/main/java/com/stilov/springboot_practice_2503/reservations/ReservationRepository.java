@@ -47,6 +47,14 @@ public interface ReservationRepository extends JpaRepository<ReservationEntity, 
     );
 
     @Query("""
+    SELECT r.roomId FROM ReservationEntity r
+    GROUP BY r.roomId
+    ORDER BY COUNT(r) DESC
+    LIMIT 3
+""")
+    List<Long> findTop3PopularRooms();
+
+    @Query("""
     SELECT r FROM ReservationEntity r
         WHERE r.userId = :userId
         AND r.status = :status
@@ -64,4 +72,6 @@ public interface ReservationRepository extends JpaRepository<ReservationEntity, 
     Integer countByPeriod(
             @Param("startDate") LocalDate startDate
     );
+
 }
+

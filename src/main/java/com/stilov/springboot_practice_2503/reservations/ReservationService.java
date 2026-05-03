@@ -1,13 +1,16 @@
 package com.stilov.springboot_practice_2503.reservations;
 
+import com.stilov.springboot_practice_2503.entities.ReservationEntity;
 import com.stilov.springboot_practice_2503.reservations.availability.ReservationAvailabilityService;
 import com.stilov.springboot_practice_2503.reservations.stats.RequestCounterService;
 import com.stilov.springboot_practice_2503.reservations.stats.ReservationStats;
 import com.stilov.springboot_practice_2503.search_filters.GroupByUserAndStatus;
 import com.stilov.springboot_practice_2503.search_filters.ReservationSearchFilter;
+import com.stilov.springboot_practice_2503.users.UserRepository;
 import com.stilov.springboot_practice_2503.web.exceptions.InvalidReservationStatusException;
 import com.stilov.springboot_practice_2503.web.exceptions.ReservationNotFoundException;
 import com.stilov.springboot_practice_2503.web.exceptions.RoomNotAvailableException;
+import com.stilov.springboot_practice_2503.web.exceptions.UserIdNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.CannotSerializeTransactionException;
@@ -32,15 +35,17 @@ public class ReservationService {
     private final ReservationMapper mapper;
 
     private final RequestCounterService requestCounterService;
+    private final UserRepository userRepository;
 
     public ReservationService(ReservationRepository repository,
                               ReservationMapper mapper,
                               ReservationAvailabilityService reservationAvailabilityService,
-                              RequestCounterService requestCounterService) {
+                              RequestCounterService requestCounterService, UserRepository userRepository) {
         this.repository = repository;
         this.mapper = mapper;
         this.reservationAvailabilityService = reservationAvailabilityService;
         this.requestCounterService = requestCounterService;
+        this.userRepository = userRepository;
     }
 
     @Transactional(readOnly = true)
@@ -107,6 +112,9 @@ public class ReservationService {
         }
         if(!reservationDTOToCreate.endDate().isAfter(reservationDTOToCreate.startDate())){
             throw new IllegalArgumentException("Reservation end date must be after start date");
+        }
+        if(!userRepository.existsById(reservationDTOToCreate.userId())){
+            throw new UserIdNotFoundException("User id doesnt exist.");
         }
         if(!reservationAvailabilityService.isReservationAvailable(  reservationDTOToCreate.roomId(),
                                                                     reservationDTOToCreate.startDate(),

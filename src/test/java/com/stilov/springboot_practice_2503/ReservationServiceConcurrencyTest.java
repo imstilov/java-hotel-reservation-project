@@ -1,6 +1,6 @@
 package com.stilov.springboot_practice_2503;
 
-import com.stilov.springboot_practice_2503.reservations.ReservationEntity;
+import com.stilov.springboot_practice_2503.entities.ReservationEntity;
 import com.stilov.springboot_practice_2503.reservations.ReservationRepository;
 import com.stilov.springboot_practice_2503.reservations.ReservationService;
 import com.stilov.springboot_practice_2503.reservations.ReservationStatus;

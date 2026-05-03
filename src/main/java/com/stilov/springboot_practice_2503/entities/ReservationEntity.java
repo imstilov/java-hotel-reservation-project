@@ -1,5 +1,6 @@
-package com.stilov.springboot_practice_2503.reservations;
+package com.stilov.springboot_practice_2503.entities;
 
+import com.stilov.springboot_practice_2503.reservations.ReservationStatus;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
@@ -39,8 +40,6 @@ public class ReservationEntity {
     }
 
     public ReservationEntity() {}
-
-    // ... всё остальное (getters/setters) оставляешь как есть
 
     public void setUserId(Long userId) { this.userId = userId; }
     public void setRoomId(Long roomId) { this.roomId = roomId; }

@@ -1,5 +1,6 @@
 package com.stilov.springboot_practice_2503.reservations;
 
+import com.stilov.springboot_practice_2503.entities.ReservationEntity;
 import org.springframework.stereotype.Component;
 
 @Component

@@ -1,13 +1,11 @@
 package com.stilov.springboot_practice_2503.users;
 
 import com.stilov.springboot_practice_2503.web.ApiResponse;
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -28,6 +26,12 @@ public class UserController {
         log.info("Called getAllUsers method");
 
         return ResponseEntity.ok(ApiResponse.responseOk(userService.getAllUsers(), "User were found successfully."));
+    }
+
+    @PostMapping("/create")
+    public ResponseEntity<ApiResponse<UserDTO>> createUser(@RequestBody @Valid UserCreateDTO userCreateDTO){
+        log.info("Called createUser method");
+        return ResponseEntity.ok(ApiResponse.responseOk(userService.createUser(userCreateDTO), "User created successfully."));
     }
 
 

@@ -1,6 +1,8 @@
 package com.stilov.springboot_practice_2503.entities;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.FutureOrPresent;
+import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDateTime;
 
@@ -25,12 +27,11 @@ public class UserEntity {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    public UserEntity(Long id, String email, String firstName, String lastName, LocalDateTime createdAt) {
+    public UserEntity(Long id, String email, String firstName, String lastName, @FutureOrPresent LocalDateTime localDateTime) {
         this.id = id;
         this.email = email;
         this.firstName = firstName;
         this.lastName = lastName;
-        this.createdAt = createdAt;
     }
 
     public UserEntity() {

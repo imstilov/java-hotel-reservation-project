@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Регистрация — Test Hotel Inn</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <a href="/" class="header-icon" title="На главную" aria-label="На главную">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <path d="M19 12H5"/>
+      <path d="M12 19l-7-7 7-7"/>
+    </svg>
+  </a>
+  <h1 class="header-title">Test Hotel Inn</h1>
+  <a href="/register.html" class="header-icon" title="Регистрация" aria-label="Регистрация">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+      <circle cx="12" cy="7" r="4"/>
+    </svg>
+  </a>
+</header>
+
+<main class="container">
+
+  <section class="card form-card">
+    <h2>Регистрация</h2>
+    <p class="form-hint">Создайте аккаунт, чтобы бронировать номера</p>
+
+    <form id="userForm">
+      <input type="email"  name="email"     placeholder="Email"   required>
+      <input type="text"   name="firstName" placeholder="Имя"     required>
+      <input type="text"   name="lastName"  placeholder="Фамилия">
+      <button type="submit" class="btn btn-primary">Зарегистрироваться</button>
+    </form>
+    <div id="userResult" class="result"></div>
+  </section>
+
+  <section class="card">
+    <h3>Зарегистрированные пользователи</h3>
+    <button id="loadUsersBtn" class="btn btn-secondary">Загрузить список</button>
+    <ul id="usersList" class="users-list"></ul>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

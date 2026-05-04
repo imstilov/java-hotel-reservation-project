@@ -25,4 +25,12 @@ public class UserMapper {
                 userDTO.createdAt()
         );
     }
+
+    public UserEntity сreateDTOToEntity(UserCreateDTO userCreateDTO){
+        UserEntity entity = new UserEntity();
+        entity.setEmail(userCreateDTO.email());
+        entity.setFirstName(userCreateDTO.firstName());
+        entity.setLastName(userCreateDTO.lastName());
+        return entity;
+    }
 }

@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: on-failure
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: postgres
+
+
+  redis:
+    image: redis:8.2.1
+    restart: on-failure
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+volumes:
+  postgres_data:
+  redis_data:

@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+import static org.springframework.data.jpa.domain.AbstractPersistable_.id;
+
 @RestController
 @RequestMapping("/reservation")
 public class ReservationController {
@@ -22,17 +24,33 @@ public class ReservationController {
 
     private final ReservationService reservationService;
 
+    private final ManualCachingReservationService manualCachingReservationService;
+
     private final AsyncApproveHandler asyncApproveHandler;
 
-    public ReservationController(ReservationService reservationService, AsyncApproveHandler asyncApproveHandler) {
+    public ReservationController(ReservationService reservationService, ManualCachingReservationService manualCachingReservationService, AsyncApproveHandler asyncApproveHandler) {
         this.reservationService = reservationService;
+        this.manualCachingReservationService = manualCachingReservationService;
         this.asyncApproveHandler = asyncApproveHandler;
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<ReservationDTO>> getReservationByUserId(@PathVariable("id") Long id) {
-            log.info("Called getReservationById with id " + id);
-            return ResponseEntity.ok(ApiResponse.responseOk(reservationService.getReservationById(id), "Reservation found successfully."));
+    public ResponseEntity<ApiResponse<ReservationDTO>> getReservationByUserId(
+            @PathVariable("id") Long id,
+            @RequestParam(value = "cacheMode", defaultValue = "NONE_CACHE") CacheMode cacheMode) {
+            log.info("Called getReservationById with id={} , with cache mode = {} ",id, cacheMode);
+
+            ReservationServiceInteface service = resolveReservationService(cacheMode);
+            return ResponseEntity
+                    .ok(ApiResponse.responseOk(service.getReservationById(id),
+                            "Reservation found successfully."));
+    }
+
+    private ReservationServiceInteface resolveReservationService(CacheMode cacheMode){
+        return switch(cacheMode){
+            case NONE_CACHE -> reservationService;
+            case MANUAL -> manualCachingReservationService;
+        };
     }
 
     @GetMapping("/themostpopular/top3")

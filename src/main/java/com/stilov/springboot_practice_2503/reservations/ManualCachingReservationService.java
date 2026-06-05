@@ -1,5 +1,6 @@
 package com.stilov.springboot_practice_2503.reservations;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stilov.springboot_practice_2503.entities.ReservationEntity;
 import com.stilov.springboot_practice_2503.reservations.availability.ReservationAvailabilityService;
 import com.stilov.springboot_practice_2503.reservations.stats.RequestCounterService;
@@ -11,10 +12,15 @@ import com.stilov.springboot_practice_2503.web.exceptions.InvalidReservationStat
 import com.stilov.springboot_practice_2503.web.exceptions.ReservationNotFoundException;
 import com.stilov.springboot_practice_2503.web.exceptions.RoomNotAvailableException;
 import com.stilov.springboot_practice_2503.web.exceptions.UserIdNotFoundException;
+import lombok.AllArgsConstructor;
+import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.CannotSerializeTransactionException;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
@@ -22,10 +28,11 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.*;
+import java.util.List;
 
 @Service
-public class ReservationService implements ReservationServiceInteface{
+public class ManualCachingReservationService implements ReservationServiceInteface{
+
     private final ReservationAvailabilityService reservationAvailabilityService;
 
     private static final Logger log = LoggerFactory.getLogger(ReservationService.class);
@@ -37,26 +44,33 @@ public class ReservationService implements ReservationServiceInteface{
     private final RequestCounterService requestCounterService;
     private final UserRepository userRepository;
 
-    public ReservationService(ReservationRepository repository,
-                              ReservationMapper mapper,
-                              ReservationAvailabilityService reservationAvailabilityService,
-                              RequestCounterService requestCounterService, UserRepository userRepository) {
+
+    private final RedisTemplate<String, ReservationEntity> redisTemplate;
+    private final ObjectMapper objectMapper;
+
+
+    public ManualCachingReservationService(ReservationRepository repository,
+                                           ReservationMapper mapper,
+                                           ReservationAvailabilityService reservationAvailabilityService,
+                                           RequestCounterService requestCounterService, UserRepository userRepository, ReservationRepository reservationRepository, StringRedisTemplate stringRedisTemplate, RedisTemplate<String, ReservationEntity> redisTemplate, ObjectMapper objectMapper) {
         this.repository = repository;
         this.mapper = mapper;
         this.reservationAvailabilityService = reservationAvailabilityService;
         this.requestCounterService = requestCounterService;
         this.userRepository = userRepository;
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional(readOnly = true)
     public List<ReservationDTO> searchAllByFilter(
             ReservationSearchFilter filter
     ) {
-    int pageSize = filter.pageSize() != null
-            ? filter.pageSize() : 10;
-    int pageNumber = filter.pageNumber() != null
-            ? filter.pageNumber() : 0;
-    var pageable = Pageable
+        int pageSize = filter.pageSize() != null
+                ? filter.pageSize() : 10;
+        int pageNumber = filter.pageNumber() != null
+                ? filter.pageNumber() : 0;
+        var pageable = Pageable
                 .ofSize(pageSize)
                 .withPage(pageNumber);
         List<ReservationEntity> allEntities = repository.searchAllByFilter(filter.roomId(), filter.userId(), pageable);
@@ -85,16 +99,28 @@ public class ReservationService implements ReservationServiceInteface{
 
     @Transactional(readOnly = true)
     public List<Long> getMostPopularRooms(){
-      requestCounterService.increment();
-      return repository.findTop3PopularRooms();
+        requestCounterService.increment();
+        return repository.findTop3PopularRooms();
     };
 
+    @SneakyThrows
     @Transactional(readOnly = true)
     public ReservationDTO getReservationById(Long id) {
+        log.info("Getting reservation from DB: id={}", id);
+
+        ReservationEntity entityFromCache = redisTemplate.opsForValue().get("reservation: " + id);
+        if(entityFromCache != null){
+            return mapper.toDomain(entityFromCache);
+        }
+
         ReservationEntity reservationEntity = repository.findById(id)
                 .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));
 
+        redisTemplate.opsForValue()
+                .set("reservation: " + id, reservationEntity);
+
         return mapper.toDomain(reservationEntity);
+
     };
 
     public ReservationStats getCountStats(){
@@ -117,9 +143,9 @@ public class ReservationService implements ReservationServiceInteface{
             throw new UserIdNotFoundException("User id doesnt exist.");
         }
         if(!reservationAvailabilityService.isReservationAvailable(  reservationDTOToCreate.roomId(),
-                                                                    reservationDTOToCreate.startDate(),
-                                                                    reservationDTOToCreate.endDate()
-                                                                    )){
+                reservationDTOToCreate.startDate(),
+                reservationDTOToCreate.endDate()
+        )){
             throw new RoomNotAvailableException(reservationDTOToCreate.roomId());
         }
         var entityToSave = mapper.toEntity(reservationDTOToCreate);
@@ -157,7 +183,7 @@ public class ReservationService implements ReservationServiceInteface{
     @Transactional
     public void cancelReservation(Long id) {
         var reservation = repository.findById(id)
-                        .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));
+                .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));
         if(reservation.getStatus().equals(ReservationStatus.APPROVED)){
             throw new InvalidReservationStatusException("Reservation status cannot be cancelled, status is approved");
         }

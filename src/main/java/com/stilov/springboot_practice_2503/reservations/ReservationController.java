@@ -14,22 +14,20 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-import static org.springframework.data.jpa.domain.AbstractPersistable_.id;
-
 @RestController
 @RequestMapping("/reservation")
 public class ReservationController {
 
     private static final Logger log = LoggerFactory.getLogger(ReservationController.class);
 
-    private final ReservationService reservationService;
+    private final NonCacheReservationService nonCacheReservationService;
 
     private final ManualCachingReservationService manualCachingReservationService;
 
     private final AsyncApproveHandler asyncApproveHandler;
 
-    public ReservationController(ReservationService reservationService, ManualCachingReservationService manualCachingReservationService, AsyncApproveHandler asyncApproveHandler) {
-        this.reservationService = reservationService;
+    public ReservationController(NonCacheReservationService nonCacheReservationService, ManualCachingReservationService manualCachingReservationService, AsyncApproveHandler asyncApproveHandler) {
+        this.nonCacheReservationService = nonCacheReservationService;
         this.manualCachingReservationService = manualCachingReservationService;
         this.asyncApproveHandler = asyncApproveHandler;
     }
@@ -46,17 +44,10 @@ public class ReservationController {
                             "Reservation found successfully."));
     }
 
-    private ReservationServiceInteface resolveReservationService(CacheMode cacheMode){
-        return switch(cacheMode){
-            case NONE_CACHE -> reservationService;
-            case MANUAL -> manualCachingReservationService;
-        };
-    }
-
     @GetMapping("/themostpopular/top3")
     public ResponseEntity<ApiResponse<List<Long>>> getTop3Reservations(){
         log.info("Called getTop3Reservations controller method");
-        return ResponseEntity.ok(ApiResponse.responseOk(reservationService.getMostPopularRooms(), "Reservations were found successfully."));
+        return ResponseEntity.ok(ApiResponse.responseOk(nonCacheReservationService.getMostPopularRooms(), "Reservations were found successfully."));
     }
 
     @GetMapping
@@ -73,14 +64,14 @@ public class ReservationController {
                 pageSize,
                 pageNumber
         );
-        return ResponseEntity.ok(ApiResponse.responseOk(reservationService.searchAllByFilter(filter),
+        return ResponseEntity.ok(ApiResponse.responseOk(nonCacheReservationService.searchAllByFilter(filter),
                 "Reservations found successfully."));
     }
 
     @GetMapping("/stats")
     public ResponseEntity<ApiResponse<ReservationStats>> getReservationStats(){
         log.info("Called getReservationStats");
-        return ResponseEntity.ok(ApiResponse.responseOk(reservationService.getCountStats(), "Reservation stats found successfully."));
+        return ResponseEntity.ok(ApiResponse.responseOk(nonCacheReservationService.getCountStats(), "Reservation stats found successfully."));
     }
 
     @GetMapping("/groupby")
@@ -97,23 +88,28 @@ public class ReservationController {
                 pageSize,
                 pageNumber
         );
-        return ResponseEntity.ok(ApiResponse.responseOk(reservationService.groupByStatusAndUserId(filter),
+        return ResponseEntity.ok(ApiResponse.responseOk(nonCacheReservationService.groupByStatusAndUserId(filter),
                 "Reservations found successfully."));
     }
 
 
     @PostMapping
-    public ResponseEntity<ApiResponse<ReservationDTO>> createReservation(@RequestBody @Valid ReservationDTO reservationDTOToCreate){
+    public ResponseEntity<ApiResponse<ReservationDTO>> createReservation(
+            @RequestBody @Valid ReservationDTO reservationDTOToCreate,
+            @RequestParam(value = "cacheMode", defaultValue = "NONE_CACHE") CacheMode cacheMode){
         log.info("Called createReservation");
+
+        ReservationServiceInteface service = resolveReservationService(cacheMode);
+
         return ResponseEntity.ok(ApiResponse
-                .responseOk(reservationService.createReservation(reservationDTOToCreate),
+                .responseOk(service.createReservation(reservationDTOToCreate),
                         "Reservation created successfully."));
     };
 
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<ReservationDTO>> updateReservation(@PathVariable("id") Long id, @RequestBody ReservationDTO reservationDTOToUpdate){
         log.info("Called updateReservation id={}, reservationToUpdate={}", id, reservationDTOToUpdate);
-        var updated = reservationService.updateReservation(id, reservationDTOToUpdate);
+        var updated = nonCacheReservationService.updateReservation(id, reservationDTOToUpdate);
         return ResponseEntity.ok(ApiResponse.responseOk(updated,
                 "Reservation updated successfully"));
     }
@@ -128,9 +124,21 @@ public class ReservationController {
     }
 
     @DeleteMapping("/{id}/cancel")
-    public ResponseEntity<ApiResponse<Void>> cancelReservation(@PathVariable("id") Long id){
-        log.info("Called cancelReservation id={}", id);
-            reservationService.cancelReservation(id);
+    public ResponseEntity<ApiResponse<Void>> cancelReservation(
+            @PathVariable("id") Long id,
+            @RequestParam(value = "cacheMode", defaultValue = "NONE_CACHE") CacheMode cacheMode){
+            log.info("Called cancelReservation id={}", id);
+
+            ReservationServiceInteface service = resolveReservationService(cacheMode);
+
+            service.cancelReservation(id);
             return ResponseEntity.ok(ApiResponse.responseOk("Reservation deleted successfully."));
+    }
+
+    private ReservationServiceInteface resolveReservationService(CacheMode cacheMode){
+        return switch(cacheMode){
+            case NONE_CACHE -> nonCacheReservationService;
+            case MANUAL -> manualCachingReservationService;
+        };
     }
 }

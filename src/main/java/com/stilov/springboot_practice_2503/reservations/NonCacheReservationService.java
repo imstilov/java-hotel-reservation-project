@@ -25,10 +25,10 @@ import java.time.LocalDate;
 import java.util.*;
 
 @Service
-public class ReservationService implements ReservationServiceInteface{
+public class NonCacheReservationService implements ReservationServiceInteface{
     private final ReservationAvailabilityService reservationAvailabilityService;
 
-    private static final Logger log = LoggerFactory.getLogger(ReservationService.class);
+    private static final Logger log = LoggerFactory.getLogger(NonCacheReservationService.class);
 
     private final ReservationRepository repository;
 
@@ -37,10 +37,10 @@ public class ReservationService implements ReservationServiceInteface{
     private final RequestCounterService requestCounterService;
     private final UserRepository userRepository;
 
-    public ReservationService(ReservationRepository repository,
-                              ReservationMapper mapper,
-                              ReservationAvailabilityService reservationAvailabilityService,
-                              RequestCounterService requestCounterService, UserRepository userRepository) {
+    public NonCacheReservationService(ReservationRepository repository,
+                                      ReservationMapper mapper,
+                                      ReservationAvailabilityService reservationAvailabilityService,
+                                      RequestCounterService requestCounterService, UserRepository userRepository) {
         this.repository = repository;
         this.mapper = mapper;
         this.reservationAvailabilityService = reservationAvailabilityService;

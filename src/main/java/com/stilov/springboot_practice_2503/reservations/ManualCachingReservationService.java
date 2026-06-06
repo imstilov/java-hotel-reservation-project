@@ -12,9 +12,6 @@ import com.stilov.springboot_practice_2503.web.exceptions.InvalidReservationStat
 import com.stilov.springboot_practice_2503.web.exceptions.ReservationNotFoundException;
 import com.stilov.springboot_practice_2503.web.exceptions.RoomNotAvailableException;
 import com.stilov.springboot_practice_2503.web.exceptions.UserIdNotFoundException;
-import lombok.AllArgsConstructor;
-import lombok.SneakyThrows;
-import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.CannotSerializeTransactionException;
@@ -29,13 +26,16 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import static org.springframework.data.jpa.domain.AbstractPersistable_.id;
 
 @Service
 public class ManualCachingReservationService implements ReservationServiceInteface{
 
     private final ReservationAvailabilityService reservationAvailabilityService;
 
-    private static final Logger log = LoggerFactory.getLogger(ReservationService.class);
+    private static final Logger log = LoggerFactory.getLogger(NonCacheReservationService.class);
 
     private final ReservationRepository repository;
 
@@ -43,6 +43,8 @@ public class ManualCachingReservationService implements ReservationServiceIntefa
 
     private final RequestCounterService requestCounterService;
     private final UserRepository userRepository;
+
+    private static final long CACHE_TTL_MINUTES = 1;
 
 
     private final RedisTemplate<String, ReservationEntity> redisTemplate;
@@ -103,21 +105,22 @@ public class ManualCachingReservationService implements ReservationServiceIntefa
         return repository.findTop3PopularRooms();
     };
 
-    @SneakyThrows
     @Transactional(readOnly = true)
     public ReservationDTO getReservationById(Long id) {
-        log.info("Getting reservation from DB: id={}", id);
+        log.info("Getting reservation from Cache: id={}", id);
 
         ReservationEntity entityFromCache = redisTemplate.opsForValue().get("reservation: " + id);
         if(entityFromCache != null){
             return mapper.toDomain(entityFromCache);
         }
 
+
+        log.info("Reservation not found in Cache: id={}", id);
         ReservationEntity reservationEntity = repository.findById(id)
                 .orElseThrow(() -> new ReservationNotFoundException("Reservation not found by id: " + id));
 
         redisTemplate.opsForValue()
-                .set("reservation: " + id, reservationEntity);
+                .set("reservation: " + id, reservationEntity, CACHE_TTL_MINUTES, TimeUnit.MINUTES);
 
         return mapper.toDomain(reservationEntity);
 
@@ -152,6 +155,12 @@ public class ManualCachingReservationService implements ReservationServiceIntefa
         entityToSave.setStatus(ReservationStatus.PENDING);
         var savedEntity = repository.save(entityToSave);
         requestCounterService.increment();
+
+        log.info("Setting reservtion into Cache by id={}", id);
+
+        redisTemplate.opsForValue()
+                .set("reservation: " + id, entityToSave, CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+
         return mapper.toDomain(savedEntity);
     }
 
@@ -191,8 +200,15 @@ public class ManualCachingReservationService implements ReservationServiceIntefa
             throw new InvalidReservationStatusException("Reservation status cannot be cancelled, status is already cancelled");
         }
         repository.setStatus(id, ReservationStatus.CANCELED);
+
+
         requestCounterService.increment();
         log.info("Reservation has been cancelled by user: id={}", id);
+
+        log.info("Setting reservtion into Cache by id={}", id);
+
+        redisTemplate.opsForValue()
+                .set("reservation: " + id, reservation, CACHE_TTL_MINUTES, TimeUnit.MINUTES);
     }
 
 

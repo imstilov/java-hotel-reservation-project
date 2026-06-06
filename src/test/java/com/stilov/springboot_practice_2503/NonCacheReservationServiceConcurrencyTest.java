@@ -2,7 +2,7 @@ package com.stilov.springboot_practice_2503;
 
 import com.stilov.springboot_practice_2503.entities.ReservationEntity;
 import com.stilov.springboot_practice_2503.reservations.ReservationRepository;
-import com.stilov.springboot_practice_2503.reservations.ReservationService;
+import com.stilov.springboot_practice_2503.reservations.NonCacheReservationService;
 import com.stilov.springboot_practice_2503.reservations.ReservationStatus;
 import com.stilov.springboot_practice_2503.reservations.availability.ReservationAvailabilityService;
 import org.junit.jupiter.api.AfterEach;
@@ -27,9 +27,9 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 
 @SpringBootTest
-class ReservationServiceConcurrencyTest {
+class NonCacheReservationServiceConcurrencyTest {
 
-    @Autowired private ReservationService service;
+    @Autowired private NonCacheReservationService service;
     @Autowired private ReservationRepository repo;
     @MockitoSpyBean private ReservationAvailabilityService availabilityService;
 

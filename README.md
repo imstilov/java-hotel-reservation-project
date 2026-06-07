@@ -1,24 +1,74 @@
 # Spring Boot Reservation System
 
-**Java 17 · Spring Boot 3.4.4 · PostgreSQL · JPA/Hibernate · Flyway**
+**Java 17 · Spring Boot 3.4.4 · PostgreSQL · Redis · JPA/Hibernate · Flyway**
 
-A REST API for managing room reservations. Built as a personal learning project — every design decision here is intentional and documented below.
+A REST API for managing hotel room reservations. Built as a learning project — every design decision is intentional and documented below.
+
+---
+
+## Quick start
+
+Requires Docker. The app uses Spring Boot's Docker Compose integration to start PostgreSQL and Redis automatically.
+
+```bash
+./mvnw spring-boot:run
+```
+
+Swagger UI: `http://localhost:8080/swagger-ui/index.html`
 
 ---
 
 ## REST API
 
+### Reservations — `/reservation`
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/reservation/{id}` | Get reservation by ID |
-| GET | `/reservation` | Search with filters (roomId, userId, pagination) |
-| GET | `/reservation/groupby` | Filter by userId and status with pagination |
+| GET | `/reservation/{id}` | Get by ID. Accepts `?cacheMode=MANUAL` to read/write Redis |
+| GET | `/reservation` | Search with filters: `roomId`, `userId`, `pageSize`, `pageNumber` |
+| GET | `/reservation/groupby` | Filter by `userId` and `status` with pagination |
 | GET | `/reservation/stats` | Request counter + monthly reservation count |
-| POST | `/reservation` | Create reservation (status auto-set to PENDING) |
-| PUT | `/reservation/{id}` | Update reservation (PENDING only) |
-| POST | `/reservation/{id}/approve` | Approve reservation (async) |
+| GET | `/reservation/themostpopular/top3` | IDs of the 3 most-booked rooms |
+| POST | `/reservation` | Create reservation (status auto-set to `PENDING`) |
+| PUT | `/reservation/{id}` | Update reservation (only allowed when status is `PENDING`) |
+| POST | `/reservation/{id}/approve` | Approve reservation (runs async) |
 | DELETE | `/reservation/{id}/cancel` | Cancel reservation |
-| POST | `/reservation/availability/check` | Check room availability for a date range |
+| POST | `/reservation/availability/check` | Check if a room is free for a date range |
+
+### Users — `/hotel/users`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/hotel/users` | List all users |
+| POST | `/hotel/users/create` | Create a user |
+
+### Response envelope
+
+Every endpoint returns the same structure:
+
+**Success:**
+```json
+{
+  "success": true,
+  "message": "Reservation found successfully.",
+  "detailedMessage": null,
+  "data": { "id": 1, "roomId": 5, "status": "PENDING" },
+  "requestTime": "2026-04-25T19:47:08"
+}
+```
+
+**Error:**
+```json
+{
+  "success": false,
+  "message": "Entity not found",
+  "detailedMessage": "Reservation not found by id: 99",
+  "data": null,
+  "requestTime": "2026-04-25T19:47:08"
+}
+```
+
+`ApiResponse<T>` is generic — works with any payload type. Three static factory methods handle construction: `responseOk(data, message)`, `responseOk(message)` for void responses, and `responseError(message, detailedMessage)`.
 
 ---
 
@@ -55,37 +105,7 @@ The `groupby` endpoint filters by `userId` and `status` at the DB level via a `W
 
 ### 1.3 Generics — ApiResponse\<T\>
 
-Every endpoint returns a consistent response envelope. The client always gets the same structure regardless of what it called.
-
-**Success:**
-```json
-{
-  "success": true,
-  "message": "Reservation found successfully.",
-  "detailedMessage": null,
-  "data": { "id": 1, "roomId": 5, "status": "PENDING" },
-  "requestTime": "2026-04-25T19:47:08"
-}
-```
-
-**Error:**
-```json
-{
-  "success": false,
-  "message": "Entity not found",
-  "detailedMessage": "Reservation not found by id: 99",
-  "data": null,
-  "requestTime": "2026-04-25T19:47:08"
-}
-```
-
-The class uses a generic type parameter `<T>` so it works with any payload — `ApiResponse<Reservation>`, `ApiResponse<List<Reservation>>`, or `ApiResponse<Void>` for endpoints that return nothing.
-
-Three static factory methods handle construction:
-
-- `responseOk(T data, String message)` — successful response with payload
-- `responseOk(String message)` — successful response, no payload (cancel/delete)
-- `responseError(String message, String detailedMessage)` — error with a short user-facing message and a detailed one for debugging
+The class uses a generic type parameter `<T>` so it works with any payload — `ApiResponse<ReservationDTO>`, `ApiResponse<List<ReservationDTO>>`, or `ApiResponse<Void>` for endpoints that return nothing.
 
 **Generic wildcards — when each is used:**
 
@@ -103,23 +123,23 @@ PECS — Producer Extends, Consumer Super.
 
 #### Thread-safe request counter
 
-`RequestCounterService` uses `AtomicInteger` to count reservation creations since app startup. It increments on every successful `createReservation()` call.
+`RequestCounterService` uses `AtomicInteger` to count reservation operations since app startup.
 
 **Why `AtomicInteger` over `synchronized`:** `counter++` is three operations — read, add, write. If two threads hit it simultaneously, both read the same value, both add 1, and both write the same result — you lose an increment. `AtomicInteger` handles this at the CPU level without blocking threads. `synchronized` would work too but forces threads to take turns, which is slower under load.
 
-`GET /reservation/stats` returns both the in-memory request count and the number of reservations created in the current calendar month (queried directly from the DB).
+`GET /reservation/stats` returns both the in-memory request count and the number of reservations created in the current calendar month (queried from the DB).
 
 #### Async approval with @Async and CompletableFuture
 
-`approveReservation()` runs in a separate thread from a configured `ThreadPoolTaskExecutor`. The client gets a response immediately without waiting for the availability check and DB write to complete.
+`approveReservation()` runs in a separate thread from a configured `ThreadPoolTaskExecutor`. The client gets a response immediately without waiting for the availability check and DB write to finish.
 
-The method returns `CompletableFuture<Reservation>` — a container for a result that will exist later. The controller uses `.thenApply()` to transform the reservation into a `ResponseEntity` once it's ready.
+The method returns `CompletableFuture<ReservationDTO>` — a container for a result that will exist later. The controller uses `.thenApply()` to transform the result into a `ResponseEntity` once it's ready.
 
 **ThreadPoolTaskExecutor settings:**
 
 | Setting | Value | Reason |
 |---------|-------|--------|
-| `corePoolSize` | 1 | Low for local dev — tuned based on load testing in production |
+| `corePoolSize` | 1 | Low for local dev — tune based on load testing |
 | `maxPoolSize` | 10 | Upper limit when the queue fills up |
 | `queueCapacity` | 100 | Tasks wait here when all core threads are busy |
 | `threadNamePrefix` | `async-reservation-` | Makes async threads identifiable in logs |
@@ -143,33 +163,30 @@ ReservationException (base, extends RuntimeException)
 └── RoomNotAvailableException         → 400
 ```
 
-`GlobalExceptionHandler` catches `ReservationException` and its subclasses. Adding a new exception type doesn't require touching the handler.
+`GlobalExceptionHandler` catches each type and maps it to the right HTTP status. Adding a new exception type doesn't require changing the handler.
 
 ---
 
 ## Phase 2 — Database, Indexes & Migrations
 
-### 2.4 Switching from ddl-auto=update to Flyway
+### 2.1 Switching from ddl-auto=update to Flyway
 
-The project initially used `spring.jpa.hibernate.ddl-auto=update`, where Hibernate creates and modifies tables based on `@Entity` annotations at startup. This is convenient for prototyping but unacceptable for any environment beyond a local sandbox:
+The project initially used `spring.jpa.hibernate.ddl-auto=update`, where Hibernate creates and modifies tables based on `@Entity` annotations at startup. This is fine for prototyping but breaks down quickly:
 
-- No history of schema changes — impossible to know who added what and when
+- No history of schema changes
 - No rollback path if a migration goes wrong
 - Hibernate only adds columns, never removes them — the schema accumulates dead fields
-- Running on a different machine produces unpredictable results depending on which entities are in classpath
 - DDL operations skip code review entirely
 
-Replaced with **Flyway** — schema is now managed through versioned SQL files in `src/main/resources/db/migration/`. Each change is a numbered file (`V1__init_schema.sql`, `V2__add_indexes.sql`), tracked in `flyway_schema_history`, applied automatically on startup.
+Replaced with **Flyway** — schema is now managed through versioned SQL files in `src/main/resources/db/migration/`. Each change is a numbered file (`V1__init_schema.sql`, `V2__add_indexes.sql`, `V3__add_users_table.sql`), tracked in `flyway_schema_history`, applied automatically on startup.
 
-`ddl-auto` switched to `validate` — Hibernate now only checks that `@Entity` classes match the actual schema. If they diverge, the app fails to start. This catches drift early instead of in production.
+`ddl-auto` switched to `validate` — Hibernate now only checks that `@Entity` classes match the actual schema. If they diverge, the app refuses to start. This catches drift early.
 
-**Why Flyway over Liquibase:** Flyway uses native SQL — no XML/YAML abstraction layer to learn. The team already knows SQL, so migrations are immediately readable. Liquibase shines when you need cross-database portability (PostgreSQL + Oracle + MSSQL from one codebase) or built-in rollback in the community edition. Neither applies here.
+**Why Flyway over Liquibase:** Flyway uses native SQL — no XML/YAML abstraction layer. The team already knows SQL. Liquibase makes sense when you need cross-database portability or built-in rollback in the community edition. Neither applies here.
 
 ---
 
-#### V1 — Initial schema with constraints
-
-The initial migration creates the `reservations` table with explicit constraints rather than relying solely on application-level validation:
+### V1 — Initial schema with constraints
 
 ```sql
 CREATE TABLE reservations (
@@ -188,22 +205,18 @@ CREATE TABLE reservations (
 );
 ```
 
-**Defense in depth — two layers of validation:**
+**Two layers of validation:**
 
 | Layer | What it catches |
 |-------|-----------------|
-| Bean Validation (`@NotNull`, `@FutureOrPresent`) on `Reservation` DTO | Bad input from API clients before it reaches the service |
-| DB constraints (`NOT NULL`, `CHECK`) on `reservations` table | Bad data from any source — direct SQL, other services, manual DBA edits, bugs in the Java code |
+| Bean Validation (`@NotNull`, `@FutureOrPresent`) on DTO | Bad input from API clients before it reaches the service |
+| DB constraints (`NOT NULL`, `CHECK`) on the table | Bad data from any source — migrations, direct SQL, other services |
 
-Application-level validation alone is fragile. Anything that bypasses the application — a migration script, a colleague running an UPDATE in DataGrip, a rogue cron job — can put garbage data in the DB. Constraints make this impossible at the storage layer.
-
-The `reservations_dates_check` constraint also doubles as a safety net against a class of bugs where `endDate` and `startDate` get swapped in the service code.
+Application-level validation alone is fragile. Anything that bypasses the application — a migration script, a colleague running an `UPDATE` in DataGrip, a rogue cron job — can put garbage data in the DB. Constraints block this at the storage layer.
 
 ---
 
-### 2.1 V2 — Indexes targeting real query patterns
-
-Three indexes were added based on actual query patterns rather than guessing:
+### V2 — Indexes targeting real query patterns
 
 ```sql
 CREATE INDEX idx_reservations_user_id
@@ -221,134 +234,84 @@ CREATE INDEX idx_reservations_active
 |-------|---------|---------------|
 | `idx_reservations_user_id` | "My reservations" lookup | `WHERE user_id = ?` |
 | `idx_reservations_room_dates` | Room availability check | `WHERE room_id = ? AND start_date <= ? AND end_date >= ?` |
-| `idx_reservations_active` | Admin filters on active bookings | `WHERE start_date BETWEEN ? AND ? AND status IN ('PENDING', 'APPROVED')` |
+| `idx_reservations_active` | Admin filters on active bookings | `WHERE start_date BETWEEN ? AND ? AND status IN (...)` |
 
-**Composite index column order — ESR rule (Equality, Sort, Range):** `room_id` comes first because it's used with `=`. `start_date` and `end_date` come after because they're used with range operators. Reversing the order would make the index nearly useless for the availability query.
+**Composite index column order — ESR rule (Equality, Sort, Range):** `room_id` comes first because it's used with `=`. `start_date` and `end_date` come after because they're used with range operators. Reversing the order would break the availability query.
 
-**Partial index trade-off:** `idx_reservations_active` only contains rows where status is `PENDING` or `APPROVED`. Cancelled bookings are excluded entirely. This makes the index smaller (only ~66% of rows are indexed) and faster to maintain — INSERTs and UPDATEs on cancelled bookings don't touch this index. The trade-off is that the index only helps queries that include the same status filter; queries without it fall back to a sequential scan.
+**Partial index trade-off:** `idx_reservations_active` only indexes rows where status is `PENDING` or `APPROVED`. Cancelled bookings are excluded entirely, making the index smaller and cheaper to maintain. The trade-off: this index only helps queries that include the same status filter.
 
-**Why no index on `status`:** the column has only 3 distinct values across 100k rows (`PENDING`, `APPROVED`, `CANCELED`). Each value matches ~33% of the table. PostgreSQL's planner correctly ignores any B-Tree index here — sequentially reading 33% of pages is faster than jumping randomly to the same number of rows through an index. Low-cardinality columns rarely benefit from indexing.
+**Why no index on `status`:** the column has only 3 distinct values. Each matches ~33% of the table. PostgreSQL's query planner correctly ignores a B-Tree index here — sequentially reading 33% of pages is faster than jumping randomly to the same number of rows through an index.
 
-**Foreign key columns aren't auto-indexed:** PostgreSQL only auto-creates indexes for `PRIMARY KEY` and `UNIQUE` constraints. Even though `user_id` and `room_id` reference other tables conceptually, no index is created automatically. This is a common gotcha — without the manual indexes above, JOINs and "find by foreign key" queries would seq-scan the entire table.
+**Foreign key columns aren't auto-indexed:** PostgreSQL only auto-creates indexes for `PRIMARY KEY` and `UNIQUE` constraints. Without the manual indexes above, JOINs and "find by foreign key" queries would seq-scan the entire table.
 
 ---
 
 #### Performance verification under load
 
-Loaded 100k synthetic reservations using `generate_series` in PostgreSQL. The data is spread across 180 unique rooms (floors 1–9, 20 rooms per floor — `101..120, 201..220, ..., 901..920`) and ~5000 unique users, with start dates spanning a 2-year window.
-
-`EXPLAIN (ANALYZE, BUFFERS)` results, before and after indexes:
+Loaded 10M synthetic reservations and 4M users using `infra/seed.sh` (runs `generate_series` inside the Docker container). `EXPLAIN (ANALYZE, BUFFERS)` results before and after indexes:
 
 | Query | Without index | With index | Speedup |
 |-------|---------------|------------|---------|
-| `WHERE user_id = 248` (selective, ~21 rows) | 5.24 ms, Seq Scan, 944 pages | 0.13 ms, Bitmap Heap Scan, 26 pages | **40×** |
-| `WHERE start_date < '2026-05-01'` (selective) | — | 0.53 ms, Bitmap Index Scan via composite | — |
-| `WHERE start_date > ? AND end_date < ?` (~3% of rows) | — | 5.32 ms, **Seq Scan** | (no benefit) |
+| `WHERE user_id = 248` (~20 rows) | 5.24 ms, Seq Scan | 0.13 ms, Bitmap Heap Scan | **40×** |
+| `WHERE start_date < '2026-05-01'` | — | 0.53 ms, Bitmap Index Scan | — |
+| `WHERE start_date > ? AND end_date < ?` (~3% of rows) | — | Seq Scan (planner ignores index) | no benefit |
 
-The third row reveals an important nuance: **PostgreSQL ignores the index when the result set is too large**. Around 2.79% of the table matched, which pushed the planner toward a sequential scan — random page reads for thousands of rows would be slower than reading the table linearly. This is the planner working correctly, not a bug.
+The third row is the important one: **PostgreSQL ignores the index when the result set is too large**. Around 2.79% of the table matched, which pushed the planner toward a sequential scan — random page reads for thousands of rows is slower than reading the table linearly. This is correct planner behavior, not a bug.
 
-**Practical takeaway: indexes are not a universal "make it faster" button.** Their effectiveness depends on selectivity, leftmost prefix coverage, and the query planner's cost estimates based on table statistics. The right tool for measuring this is always `EXPLAIN ANALYZE`, not intuition.
+Indexes are not a universal "make it faster" button. Their effectiveness depends on selectivity, leftmost prefix coverage, and the planner's cost estimates. The right measurement tool is always `EXPLAIN ANALYZE`, not intuition.
 
 ---
 
-#### Entity-schema synchronization
+### V3 — Users table
 
-Switching to `ddl-auto=validate` requires `ReservationEntity` to exactly match the table schema. Updated all `@Column` annotations to declare nullability explicitly:
+```sql
+CREATE TABLE users (
+    id          BIGSERIAL    PRIMARY KEY,
+    email       VARCHAR(255) NOT NULL UNIQUE,
+    first_name  VARCHAR(100) NOT NULL,
+    last_name   VARCHAR(100),
+    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
-```java
-@Column(name = "user_id", nullable = false)
-private Long userId;
-
-@Column(name = "room_id", nullable = false)
-private Long roomId;
-
-@Column(name = "start_date", nullable = false)
-private LocalDate startDate;
-
-@Column(name = "end_date", nullable = false)
-private LocalDate endDate;
-
-@Enumerated(EnumType.STRING)
-@Column(name = "status", nullable = false, length = 255)
-private ReservationStatus status;
+ALTER TABLE reservations
+    ADD CONSTRAINT fk_reservations_user
+        FOREIGN KEY (user_id) REFERENCES users(id);
 ```
 
-Without this, a misalignment between Java and the DB silently allows null values where the DB wouldn't accept them — Hibernate generates an INSERT with explicit nulls, and the DB rejects it with a less obvious error. With `nullable = false` declared, Hibernate fails earlier with a clear message.
+Every reservation must reference a valid user. The FK is added after the users table exists rather than in V1 because V1 predates V3. Flyway applies migrations in order, so the constraint can't be defined before the table it references is created.
 
 ---
 
-## Architecture decisions
-
-### Why unchecked exceptions throughout
-
-All custom exceptions extend `RuntimeException`. There are a few reasons this makes sense for a Spring web app:
-
-- Checked exceptions would pollute every method signature with `throws ...` all the way up to the controller
-- Exceptions are handled centrally in `GlobalExceptionHandler` — no reason to catch them layer by layer
-- `@Transactional` rolls back on `RuntimeException` by default. Checked exceptions would require explicit `rollbackFor` configuration or transactions would commit even on failure
-- Spring itself uses unchecked exceptions everywhere (`DataAccessException`, etc.) for the same reasons
-
-### Why no DateRangeValidator utility class
-
-The date validation logic is two lines in the service method. Extracting it into a separate class would be over-engineering (YAGNI). A utility class makes sense when the same logic appears in 3+ places or becomes more complex — neither is true here.
-
-### Why DB-level filtering over in-memory Stream.filter()
-
-The `groupby` endpoint filters by `userId` and `status` via a JPQL `WHERE` clause rather than loading all records and filtering in Java. Pulling unnecessary data from the DB just to throw it away in the application layer makes no sense. DB-level filtering scales; in-memory filtering doesn't.
-
-### Why DTO and Entity are separate types
-
-`Reservation` (record) is the API contract — what comes in and what goes out, with Bean Validation annotations. `ReservationEntity` is the persistence model — what maps to the table, with JPA annotations. Keeping them separate means:
-
-- Validation rules live where input is received, not on the storage model
-- Internal field changes (renaming a column, adding an audit field) don't break the API
-- Sensitive or internal-only fields don't accidentally leak through the API just because they're on the entity
-
-The mapping layer between them is trivial and worth the small amount of glue code.
-
-### Why migrations live in the repository
-
-Schema is part of the application's contract with the database. The application requires specific tables, columns, and constraints to function — that requirement belongs in source control alongside the code that depends on it. A repository that builds without its schema is incomplete, the same way a project without its `pom.xml` is incomplete.
-
-This also means a fresh clone on a new machine boots with a single command: start PostgreSQL, run the app, Flyway creates the schema. No setup scripts to share, no Slack messages with `CREATE TABLE` statements.
-
----
-
-### 2.2 ACID, Transaction Isolation & Concurrency Testing
+### 2.2 ACID, Transaction Isolation & Concurrency
 
 #### The race condition in approveReservation
 
-The original `approveReservation()` had no transaction boundary. Each internal operation — `findById`, `isAvailable` (conflict check), `save` — ran in its own implicit transaction. This created a classic **TOCTOU (Time-of-Check to Time-of-Use)** race condition:
+The original `approveReservation()` had no transaction boundary. Each internal operation — `findById`, `isAvailable`, `save` — ran in its own implicit transaction. This created a classic **TOCTOU (Time-of-Check to Time-of-Use)** race condition:
 
 ```
-Thread A: isAvailable() → no conflicts found ✅
-Thread B: isAvailable() → no conflicts found ✅  ← sees stale state
+Thread A: isAvailable() → no conflicts ✅
+Thread B: isAvailable() → no conflicts ✅  ← sees stale state
 Thread A: save() → APPROVED
-Thread B: save() → APPROVED  ← double approval, ACID violation
+Thread B: save() → APPROVED  ← double approval
 ```
 
-Both threads passed the availability check before either committed, so both saw "room is free" and both approved. The result: two overlapping reservations both in `APPROVED` state — a corrupted booking.
+Both threads passed the availability check before either committed, so both saw "room is free" and both approved. Result: two overlapping reservations in `APPROVED` state.
 
 ---
 
 #### Fix — SERIALIZABLE isolation + @Retryable
 
-Added `@Transactional(isolation = Isolation.SERIALIZABLE)` to `approveReservation`. SERIALIZABLE is the strictest isolation level — PostgreSQL uses **SSI (Serializable Snapshot Isolation)** which tracks read/write dependencies between concurrent transactions. When two transactions read the same range and both write into it, PostgreSQL detects a dependency cycle and aborts one at commit time.
+Added `@Transactional(isolation = Isolation.SERIALIZABLE)` to `approveReservation`. PostgreSQL uses **SSI (Serializable Snapshot Isolation)** which tracks read/write dependencies between concurrent transactions. When two transactions read the same range and both write into it, PostgreSQL detects the cycle and aborts one at commit time.
 
 Confirmed by the transaction log:
 
 ```
-Initiating transaction rollback after commit exception
-
 CannotAcquireLockException: Unable to commit against JDBC Connection;
 ERROR: could not serialize access due to read/write dependencies among transactions
-Reason code: Canceled on identification as a pivot, during commit attempt.
 Hint: The transaction might succeed if retried.
-
-Rolling back JPA transaction on EntityManager [SessionImpl(813175210<open>)]
 ```
 
-PostgreSQL itself hints that the transaction should be retried — which is exactly what `@Retryable` does:
+PostgreSQL itself hints at retrying — which is what `@Retryable` does:
 
 ```java
 @Retryable(
@@ -360,7 +323,7 @@ PostgreSQL itself hints that the transaction should be retried — which is exac
 public ReservationDTO approveReservation(Long id) { ... }
 ```
 
-On retry, the losing transaction tries again. By that time the first transaction has already committed its `APPROVED` reservation, so the conflict check returns "room is occupied" and the retry correctly throws `InvalidReservationStatusException` instead of creating a duplicate approval.
+On retry, the losing transaction tries again. By that time the first transaction has committed its `APPROVED` reservation, so the conflict check returns "room is occupied" and the retry correctly throws `InvalidReservationStatusException`.
 
 ---
 
@@ -370,42 +333,146 @@ On retry, the losing transaction tries again. By that time the first transaction
 
 - `@Retryable` works by catching exceptions thrown at the **call site** — it wraps the method call and retries on failure.
 - `@Async` returns a `CompletableFuture` **immediately** to the caller. The actual execution happens in a separate thread, and any exception is captured inside the future — never thrown at the call site.
-- Result: `@Retryable` waits for an exception that never arrives. The retry logic is dead code.
+- Result: `@Retryable` waits for an exception that never arrives. The retry logic does nothing.
 
-`@Transactional` does not have this problem because it acts **inside** the async thread — it wraps the execution of the method body, not the call site. Spring opens the transaction in the thread where the method actually runs, which is correct.
+`@Transactional` doesn't have this problem — it acts inside the async thread, wrapping the method body where the method actually runs.
 
 ---
 
 #### Architecture — splitting async dispatch from business logic
 
-The solution is to separate the two concerns into two different Spring beans. Self-invocation (`this.method()`) bypasses Spring's proxy, so the split must be between beans:
+Self-invocation (`this.method()`) bypasses Spring's proxy, so the split must be between separate beans:
 
 ```
 ReservationController
         ↓
 AsyncApproveHandler.approveReservationAsync()   ← @Async only
-        ↓ calls via Spring proxy
+        ↓ (via Spring proxy)
 ReservationService.approveReservation()          ← @Retryable + @Transactional(SERIALIZABLE)
 ```
 
-`AsyncApproveHandler` is a `@Service` bean injected into the controller. It has one job: dispatch the approval to Spring's async thread pool and return a `CompletableFuture`. `ReservationService.approveReservation` is now a plain synchronous method with the full transaction and retry logic. Called from outside its own bean, it goes through the proxy — both `@Retryable` and `@Transactional` fire correctly.
+`AsyncApproveHandler` dispatches the call to the async thread pool. `ReservationService.approveReservation` is a plain synchronous method with the full transaction and retry logic. Called from outside its own bean, it goes through the proxy — both `@Retryable` and `@Transactional` fire correctly.
 
 ---
 
-#### Concurrency test — forcing the race condition deterministically
+#### Concurrency test — forcing the race condition
 
-A standard unit test can't reliably reproduce a race condition — threads often run sequentially by chance and the test passes for the wrong reason. The test uses two mechanisms to force genuine concurrency:
+A standard unit test can't reliably reproduce a race condition — threads often run sequentially by chance. The test uses two mechanisms to force genuine concurrency:
 
-**`@MockitoSpyBean` + `CyclicBarrier`** — a spy wraps `ReservationAvailabilityService` without changing its behavior. A `doAnswer` intercept calls the real `isAvailable()`, then blocks at a `CyclicBarrier(2)`. The barrier requires both threads to arrive before releasing either. This guarantees both threads complete the availability check (both see "no conflicts") before either proceeds to `save()` — the exact race condition scenario.
+**`@MockitoSpyBean` + `CyclicBarrier`** — a spy wraps `ReservationAvailabilityService` without changing its behavior. A `doAnswer` intercept calls the real `isAvailable()`, then blocks at a `CyclicBarrier(2)`. The barrier holds both threads until both have called `isAvailable()`, then releases them simultaneously — guaranteeing both see "no conflicts" before either reaches `save()`.
 
 ```
-Thread A: isAvailable() → empty ✅ → waits at barrier...
-Thread B: isAvailable() → empty ✅ → arrives at barrier → both released simultaneously
+Thread A: isAvailable() → empty ✅ → waits at barrier
+Thread B: isAvailable() → empty ✅ → arrives at barrier → both released
 Thread A: save() → attempts commit
-Thread B: save() → attempts commit → PostgreSQL aborts one with serialization error
+Thread B: save() → attempts commit → PostgreSQL aborts one
 ```
 
-**Test assertion:** `assertTrue(successCount.get() < 2)` — verifies the ACID invariant. Zero successes is also valid (both aborted in a symmetric conflict); with retry logic wired in, eventually one succeeds.
+**Test assertion:** `assertTrue(successCount.get() < 2)` — zero successes is also valid (both aborted in a symmetric conflict).
+
+---
+
+## Phase 3 — Redis Caching
+
+### Manual caching with RedisTemplate
+
+Two service implementations exist behind `ReservationServiceInteface`:
+
+| Implementation | Behaviour |
+|---|---|
+| `NonCacheReservationService` | Always reads from PostgreSQL |
+| `ManualCachingReservationService` | Reads from Redis first, falls back to PostgreSQL on miss, then writes to Redis |
+
+The caller selects the implementation via a query parameter:
+
+```
+GET /reservation/42?cacheMode=MANUAL
+```
+
+Without the parameter, `cacheMode` defaults to `NONE_CACHE`.
+
+`resolveReservationService()` in the controller dispatches to the right bean:
+
+```java
+private ReservationServiceInteface resolveReservationService(CacheMode cacheMode) {
+    return switch (cacheMode) {
+        case NONE_CACHE -> nonCacheReservationService;
+        case MANUAL     -> manualCachingReservationService;
+    };
+}
+```
+
+**Redis key pattern:** `reservation: {id}`
+
+**Why `RedisTemplate<String, ReservationEntity>` instead of `StringRedisTemplate`:** `StringRedisTemplate` only handles `String` values, so you'd need to serialize/deserialize manually with `ObjectMapper`. `RedisTemplate` with a configured serializer handles the conversion automatically. The template type parameter `ReservationEntity` means `.opsForValue().get(key)` returns a `ReservationEntity` directly — no casting.
+
+---
+
+## Rate limiting
+
+`RateLimitFilter` runs before every request (highest filter precedence). It allows 10 requests per minute per client and returns HTTP 429 when the limit is exceeded.
+
+**Client identity:** the filter reads the `X-API-KEY` header first. If the header is absent or blank, it falls back to the remote IP address.
+
+**Implementation — fixed window with Redis INCR:**
+
+```
+key = "rate:{clientId}:{windowIndex}"
+windowIndex = System.currentTimeMillis() / windowSizeMs
+```
+
+On each request, the counter for the current window is incremented atomically with `INCR`. When the counter first appears (value == 1), an expiry is set equal to the window size — so the key disappears automatically when the window closes. If the counter exceeds the limit, the request is rejected.
+
+**Fixed window trade-off:** a client can send 10 requests at 00:59 and 10 more at 01:00 — effectively 20 requests in two seconds. A sliding window would prevent this but requires more Redis operations per request. For this project the fixed window is an acceptable starting point.
+
+---
+
+## Architecture decisions
+
+### Why unchecked exceptions throughout
+
+All custom exceptions extend `RuntimeException`:
+
+- Checked exceptions would pollute every method signature with `throws ...` all the way up to the controller
+- Exceptions are handled centrally in `GlobalExceptionHandler` — no reason to catch them layer by layer
+- `@Transactional` rolls back on `RuntimeException` by default. Checked exceptions would require explicit `rollbackFor` configuration or transactions would commit even on failure
+- Spring itself uses unchecked exceptions everywhere (`DataAccessException`, etc.) for the same reasons
+
+### Why no DateRangeValidator utility class
+
+The date validation logic is two lines in the service method. Extracting it into a separate class would be over-engineering at this scale. A utility class makes sense when the same logic appears in three or more places or becomes complex — neither is true here.
+
+### Why DB-level filtering over in-memory Stream.filter()
+
+The `groupby` endpoint filters by `userId` and `status` via a JPQL `WHERE` clause rather than loading all records and filtering in Java. Pulling data from the DB just to throw it away in the application layer makes no sense at any scale. DB-level filtering scales; in-memory filtering doesn't.
+
+### Why DTO and Entity are separate types
+
+`ReservationDTO` (record) is the API contract — what comes in and what goes out, with Bean Validation annotations. `ReservationEntity` is the persistence model — what maps to the table, with JPA annotations. Keeping them separate means:
+
+- Validation rules live where input is received, not on the storage model
+- Internal field changes (renaming a column, adding an audit field) don't break the API
+- Sensitive or internal-only fields don't accidentally leak through the API
+
+The mapping layer between them is a small amount of glue code, worth it.
+
+### Why migrations live in the repository
+
+Schema is part of the application's contract with the database. The application requires specific tables, columns, and constraints to run — that requirement belongs in source control alongside the code that depends on it.
+
+This also means a fresh clone on a new machine boots with a single command: start Docker, run the app, Flyway creates the schema. No setup scripts to share, no `CREATE TABLE` statements sent over chat.
+
+---
+
+## Load testing data
+
+`infra/seed.sh` generates test data by running SQL inside the Docker container (no local `psql` required):
+
+```bash
+bash infra/seed.sh
+```
+
+Default: 4 000 000 users, 10 000 000 reservations, inserted in batches of 500 000 via `generate_series`. Takes roughly 5–10 minutes depending on hardware.
 
 ---
 
@@ -415,8 +482,11 @@ Thread B: save() → attempts commit → PostgreSQL aborts one with serializatio
 |--|--|
 | Language | Java 17 |
 | Framework | Spring Boot 3.4.4 |
-| Database | PostgreSQL |
-| ORM | JPA / Hibernate (ddl-auto: validate) |
+| Database | PostgreSQL 16 |
+| Cache | Redis 8 |
+| ORM | JPA / Hibernate (`ddl-auto: validate`) |
 | Migrations | Flyway |
 | Build tool | Maven |
 | Validation | Jakarta Bean Validation |
+| API docs | Springdoc OpenAPI (Swagger UI) |
+| Infrastructure | Docker Compose |
